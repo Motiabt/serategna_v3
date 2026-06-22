@@ -1,0 +1,51 @@
+name: serategna
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-serategna}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-serategna}
+      POSTGRES_DB: ${POSTGRES_DB:-serategna}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-serategna}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # not published in prod — only the api talks to it
+    expose:
+      - '5432'
+
+  api:
+    build: ./server
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-serategna}:${POSTGRES_PASSWORD:-serategna}@db:5432/${POSTGRES_DB:-serategna}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?set a strong secret in .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?set a strong secret in .env}
+      ACCESS_TOKEN_TTL: 900
+      REFRESH_TOKEN_TTL: 2592000
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+      OTP_DEV_MODE: ${OTP_DEV_MODE:-false}
+      SEED_ON_START: ${SEED_ON_START:-true}
+    expose:
+      - '4000'
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - '${WEB_PORT:-8080}:80'
+
+volumes:
+  db_data:

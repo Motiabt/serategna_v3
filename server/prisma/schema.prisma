@@ -1,0 +1,608 @@
+// Serategna Phase 1 data model (spec B3.3).
+// Datasource defaults to SQLite for zero-config dev; switch `provider` to
+// "postgresql" and point DATABASE_URL at Postgres for production. Enum-like
+// fields are stored as strings and array fields as JSON text so the same
+// schema runs on both engines.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["omitApi"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ── Identity & auth ──────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  phone        String   @unique
+  email        String?  @unique // diaspora users register/sign in by email
+  name         String
+  language     String   @default("en") // en | am | om
+  isWorker     Boolean  @default(false)
+  isClient     Boolean  @default(true)
+  isAgent      Boolean  @default(false)
+  isAdmin      Boolean  @default(false)
+  adminRole    String?  // operations | finance | trust_safety | super_admin
+  tier         Int      @default(0) // 0 provisional, 1 fayda-verified, 2 credit-ready
+  accountType  String   @default("household") // household | business | sme | diaspora (Business Model §1.2)
+  faydaStatus  String   @default("none") // none | pending | verified | rejected
+  faydaNumber  String?
+  totpSecret   String?  // authenticator-app 2FA secret (base32)
+  totpEnabled  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  workerProfile WorkerProfile?
+  agentProfile  Agent?
+  jobsPosted    Job[]          @relation("ClientJobs")
+  jobsWorked    Job[]          @relation("WorkerJobs")
+  bids          Bid[]
+  messages      Message[]
+  payouts       Payout[]
+  ratingsGiven  Rating[]       @relation("Rater")
+  ratingsGot    Rating[]       @relation("Ratee")
+  disputes      Dispute[]      @relation("DisputeOpener")
+  sosEvents     SosEvent[]
+  scoreHistory  ScoreSnapshot[]
+  verifications VerificationRequest[]
+  refreshTokens RefreshToken[]
+}
+
+model OtpCode {
+  id        String   @id @default(cuid())
+  phone     String
+  code      String
+  purpose   String   @default("login") // login | register
+  expiresAt DateTime
+  consumed  Boolean  @default(false)
+  attempts  Int      @default(0) // brute-force guard
+  createdAt DateTime @default(now())
+
+  @@index([phone])
+}
+
+// Tamper-evident audit trail for sensitive/admin actions (spec E1).
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  action    String
+  target    String?
+  meta      String   @default("{}")
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([actorId])
+  @@index([action])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ── Profiles ─────────────────────────────────────────────────────────────────
+
+model WorkerProfile {
+  id               String  @id @default(cuid())
+  userId           String  @unique
+  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categories       String  @default("[]") // JSON array of taxonomy group keys
+  roles            String  @default("[]") // JSON array of specialization role keys
+  bio              String  @default("")
+  voiceBioRef      String?
+  subCity          String  @default("Bole")
+  lat              Float   @default(9.0108)
+  lng              Float   @default(38.7613)
+  serviceRadiusKm  Float   @default(8)
+  availability     String  @default("available") // available | busy | offline
+  instantDispatch  Boolean @default(false)
+  femaleClientOnly Boolean @default(false)
+  vouchedById      String? // agent or worker user id
+  completionRate   Float   @default(0)
+  avgRating        Float   @default(0)
+  jobsCompleted    Int     @default(0)
+  createdAt        DateTime @default(now())
+}
+
+model Agent {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  territory       String   @default("Bole")
+  onboardingCount Int      @default(0)
+  createdAt       DateTime @default(now())
+}
+
+// ── Marketplace ──────────────────────────────────────────────────────────────
+
+model Job {
+  id            String   @id @default(cuid())
+  clientId      String
+  client        User     @relation("ClientJobs", fields: [clientId], references: [id])
+  workerId      String?
+  worker        User?    @relation("WorkerJobs", fields: [workerId], references: [id])
+  category      String   // taxonomy group key
+  role          String?  // specialization role key
+  vertical      String   @default("home") // home | delivery | pro | care
+  title         String
+  description   String   @default("")
+  voiceNoteRef  String?
+  photos        String   @default("[]") // JSON array of urls
+  subCity       String   @default("Bole")
+  lat           Float    @default(9.0108)
+  lng           Float    @default(38.7613)
+  pricingMode   String   @default("bid") // fixed | bid
+  priceBandLow  Int      @default(0)
+  priceBandHigh Int      @default(0)
+  agreedPrice   Int?
+  // Employment taxonomy
+  employmentType String  @default("gig") // gig | short_term | contract | permanent | group_hire
+  formality      String  @default("informal") // formal | informal
+  rateType       String  @default("fixed") // fixed | hourly | daily | weekly | monthly
+  positions      Int     @default(1) // > 1 for group hire
+  filledPositions Int    @default(0)
+  durationLabel  String? // e.g. "3 months", "Permanent"
+  requiresContract Boolean @default(false)
+  // job lifecycle: open → accepted → enroute → started → completed → paid → confirmed(finalized)
+  status        String   @default("open") // open|accepted|enroute|started|completed|paid|confirmed|disputed|cancelled
+  // Payment is DIRECT (employer pays worker off-platform) — Serategna never holds funds.
+  paymentMode   String   @default("direct") // direct | escrow(legacy)
+  escrowState   String   @default("none")
+  paidAt        DateTime?
+  paymentRef    String?  // Telebirr/CBE transaction ref or receipt note (wage proof)
+  beneficiaryName  String? // diaspora: who the job is managed for
+  beneficiaryPhone String?
+  // domestic / permanent-contract fields (housemaid form)
+  liveIn        Boolean  @default(false)
+  daysOff       String?  // e.g. "Sunday"
+  duties        String   @default("[]") // JSON array of duty strings
+  guarantorRequired Boolean @default(false)
+  startsAt      DateTime? // scheduled start time
+  endsAt        DateTime? // scheduled finish time
+  startedAt     DateTime?
+  completedAt   DateTime?
+  confirmedAt   DateTime?
+  startLat      Float?
+  startLng      Float?
+  // live taxi-style tracking (worker's current position while en route)
+  liveLat       Float?
+  liveLng       Float?
+  liveAt        DateTime?
+  photoProofRef String?
+  scheduledFor  DateTime?
+  expiresAt     DateTime? // application deadline — auto-closed when passed
+  recurring     String?  // null | weekly | monthly
+  createdAt     DateTime @default(now())
+
+  bids        Bid[]
+  messages    Message[]
+  ratings     Rating[]
+  disputes    Dispute[]
+  sosEvents   SosEvent[]
+  ledgerEntries LedgerEntry[]
+
+  @@index([status])
+  @@index([category])
+  @@index([status, createdAt]) // worker feed: open jobs, newest first
+  @@index([clientId])          // "my posts" + company-brand batch
+  @@index([workerId, status])  // worker engagements + finalize counts
+  @@index([expiresAt])         // deadline auto-expiry sweep
+}
+
+model Bid {
+  id        String   @id @default(cuid())
+  jobId     String
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  workerId  String
+  worker    User     @relation(fields: [workerId], references: [id])
+  amount    Int
+  message   String   @default("")
+  status    String   @default("pending") // pending | accepted | declined | withdrawn
+  // ── Enterprise ATS pipeline (web hiring console) ──────────────────────────
+  // These columns already exist in the database from the original ATS build.
+  stage         String   @default("applied") // applied|shortlisted|interview|offer|hired|declined
+  interviewAt   DateTime?
+  interviewMode String?  // in_person | phone | video
+  stageNote     String?  // interview note / decline reason / offer message
+  onboarding    String?  @default("[]") // JSON [{ key, label, done }]
+  createdAt DateTime @default(now())
+
+  @@index([jobId])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  jobId     String
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User     @relation(fields: [senderId], references: [id])
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([jobId])
+}
+
+// ── Escrow ledger (append-only double-entry, spec B3.2) ──────────────────────
+// One row = one balanced movement: `amount` debited from debitAccount and
+// credited to creditAccount. Never updated or deleted — corrections are new
+// rows referencing `correctsId`.
+
+model LedgerEntry {
+  id            String   @id @default(cuid())
+  txnId         String   // groups related movements
+  debitAccount  String   // see ACCOUNTS in lib/ledger
+  creditAccount String
+  amount        Int      // whole ETB (integer money — birr)
+  jobId         String?
+  job           Job?     @relation(fields: [jobId], references: [id])
+  ownerId       String?  // worker/client the sub-ledger belongs to
+  externalRef   String?  // aggregator / bank reference
+  memo          String   @default("")
+  correctsId    String?
+  postedAt      DateTime @default(now())
+
+  @@index([txnId])
+  @@index([ownerId])
+  @@index([jobId])
+}
+
+model Payout {
+  id          String   @id @default(cuid())
+  workerId    String
+  worker      User     @relation(fields: [workerId], references: [id])
+  destination String   @default("telebirr") // telebirr | bank
+  amount      Int
+  status      String   @default("requested") // requested | processing | paid | failed
+  externalRef String?
+  createdAt   DateTime @default(now())
+
+  @@index([workerId])
+}
+
+// ── Trust, safety & disputes ─────────────────────────────────────────────────
+
+model Rating {
+  id        String   @id @default(cuid())
+  jobId     String
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  raterId   String
+  rater     User     @relation("Rater", fields: [raterId], references: [id])
+  rateeId   String
+  ratee     User     @relation("Ratee", fields: [rateeId], references: [id])
+  stars     Int
+  tags      String   @default("[]")
+  text      String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([rateeId])
+}
+
+model Dispute {
+  id          String   @id @default(cuid())
+  jobId       String
+  job         Job      @relation(fields: [jobId], references: [id])
+  openerId    String
+  opener      User     @relation("DisputeOpener", fields: [openerId], references: [id])
+  reason      String
+  evidence    String   @default("[]")
+  status      String   @default("open") // open | mediating | resolved_refund | resolved_release | rejected
+  mediatorId  String?
+  resolution  String?
+  openedAt    DateTime @default(now())
+  resolvedAt  DateTime?
+
+  @@index([status])
+}
+
+model SosEvent {
+  id          String   @id @default(cuid())
+  jobId       String?
+  job         Job?     @relation(fields: [jobId], references: [id])
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  triggerType String   @default("button") // button | silent
+  gpsTrail    String   @default("[]") // JSON array of {lat,lng,t}
+  audioRef    String?
+  status      String   @default("active") // active | acknowledged | resolved | false_alarm
+  alertChain  String   @default("[]")
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+
+  @@index([status])
+}
+
+// ── Identity verification queue (spec B3.3) ──────────────────────────────────
+
+model VerificationRequest {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  faydaNumber String?
+  docRef    String?
+  selfieRef String?
+  reviewerId String?
+  status    String   @default("pending") // pending | approved | rejected
+  mosipTxnId String?
+  decision  String?
+  createdAt DateTime @default(now())
+  decidedAt DateTime?
+
+  @@index([status])
+}
+
+// ── Serategna Score ──────────────────────────────────────────────────────────
+
+model ScoreSnapshot {
+  id           String   @id @default(cuid())
+  workerId     String
+  worker       User     @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  score        Int
+  band         String
+  components    String   @default("{}") // JSON of component sub-scores
+  modelVersion String   @default("v1")
+  computedAt   DateTime @default(now())
+
+  @@index([workerId])
+}
+
+// ── Notifications log (spec B3.1) ─────────────────────────────────────────────
+
+model NotificationLog {
+  id          String   @id @default(cuid())
+  userId      String
+  channel     String   // push | sms | telegram
+  templateKey String
+  payload     String   @default("{}")
+  status      String   @default("sent") // sent | failed | delivered
+  sentAt      DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ── Leads: enterprise inquiries & call-back requests ─────────────────────────
+
+model Lead {
+  id        String   @id @default(cuid())
+  kind      String   // enterprise | callback | support
+  name      String
+  org       String   @default("")
+  contact   String   // phone or email
+  pkg       String   @default("")
+  message   String   @default("")
+  status    String   @default("new") // new | contacted | closed
+  createdAt DateTime @default(now())
+
+  @@index([kind])
+}
+
+// ── Verifiable certifications (from TVET/colleges/institutions) ──────────────
+
+model Certification {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String   // e.g. "Housekeeping Level II"
+  institution String   // e.g. "Addis TVET College"
+  refNo       String   @default("") // certificate/registration number
+  year        String   @default("")
+  status      String   @default("pending") // pending | verified | rejected
+  reviewerId  String?
+  createdAt   DateTime @default(now())
+  decidedAt   DateTime?
+
+  @@index([userId])
+  @@index([status])
+}
+
+// ── Psychometric assessment (reliability/integrity; feeds the algorithm) ─────
+
+model PsychometricResult {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  answers          String   @default("[]") // JSON of {q, value}
+  reliabilityIndex Int      @default(0) // 0–100
+  traits           String   @default("{}") // JSON: conscientiousness, integrity, etc.
+  createdAt        DateTime @default(now())
+}
+
+// ── Subscriptions (employers pay a flat fee; workers get free app quota) ──────
+
+model Subscription {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  role            String   // employer | worker
+  plan            String   @default("free") // free | monthly | annual
+  status          String   @default("inactive") // active | inactive
+  currentPeriodEnd DateTime?
+  monthAnchor     String   @default("") // "YYYY-MM" for the current quota window
+  postsThisMonth  Int      @default(0) // employer: job posts used
+  appsThisMonth   Int      @default(0) // worker: applications used
+  createdAt       DateTime @default(now())
+}
+
+// ── Saved / shortlist (liked workers & jobs) ─────────────────────────────────
+
+model SavedItem {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String   // worker | job
+  refId     String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, kind, refId])
+  @@index([userId])
+}
+
+// ── Notifications & reminders (user-facing feed) ─────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   // job | bid | contract | payout | sos | reminder | system
+  title     String
+  body      String   @default("")
+  link      String?  // in-app route
+  read      Boolean  @default(false)
+  dueAt     DateTime? // for reminders
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ── Business / company profiles (license upload → profile, point 4) ──────────
+
+model BusinessProfile {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  companyName  String
+  sector       String   @default("")
+  licenseNo    String   @default("")
+  tin          String   @default("")
+  region       String   @default("")
+  subCity      String   @default("")
+  about        String   @default("")
+  logoUrl      String   @default("")
+  verified     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+}
+
+// ── Enterprises (multi-seat org accounts, provisioned on agreement) ──────────
+
+model Enterprise {
+  id           String   @id @default(cuid())
+  name         String
+  ownerId      String   // the admin user who signed the agreement
+  packageKey   String   @default("institution") // team | institution | managed
+  status       String   @default("active")       // active once the agreement is signed
+  seats        Int      @default(8)
+  agreementRef String   @default("")
+  logoUrl      String   @default("")
+  about        String   @default("")
+  createdAt    DateTime @default(now())
+
+  members EnterpriseMember[]
+  talent  EnterpriseTalent[]
+}
+
+model EnterpriseMember {
+  id           String     @id @default(cuid())
+  enterpriseId String
+  enterprise   Enterprise @relation(fields: [enterpriseId], references: [id])
+  userId       String
+  role         String     @default("manager") // admin | manager
+  title        String     @default("")
+  createdAt    DateTime   @default(now())
+
+  @@unique([enterpriseId, userId])
+  @@index([userId])
+}
+
+model EnterpriseTalent {
+  id           String     @id @default(cuid())
+  enterpriseId String
+  enterprise   Enterprise @relation(fields: [enterpriseId], references: [id])
+  workerId     String
+  note         String     @default("")
+  createdAt    DateTime   @default(now())
+
+  @@unique([enterpriseId, workerId])
+}
+
+// ── Iqub-style savings goal (notional — Serategna holds no funds) ────────────
+model SavingsGoal {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  label       String   @default("My iqub goal")
+  targetAmount Int     @default(0)
+  savedAmount Int      @default(0)
+  ratePct     Int      @default(10) // % of each confirmed payment to set aside
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+}
+
+// ── Fair-price guidance (spec B2.1) ──────────────────────────────────────────
+
+model PriceBand {
+  id       String @id @default(cuid())
+  category String
+  subCity  String
+  low      Int
+  high     Int
+
+  @@unique([category, subCity])
+}
+
+// ── Digital contracts (E-Transactions Proclamation 1205/2020) ─────────────────
+// OTP-based digital assent. Parties sign; signatures are immutable audit records.
+
+model Contract {
+  id            String   @id @default(cuid())
+  jobId         String?
+  clientId      String
+  workerId      String?
+  type          String   // gig | short_term | contract | permanent | group_hire | guarantor
+  title         String
+  bodyMarkdown  String   // rendered contract text
+  termsJson     String   @default("{}") // structured terms (price, duration, scope)
+  status        String   @default("draft") // draft | sent | signed | active | terminated
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
+
+  signatures    ContractSignature[]
+
+  @@index([jobId])
+  @@index([clientId])
+  @@index([workerId])
+}
+
+model ContractSignature {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  userId     String
+  role       String   // client | worker | guarantor
+  method     String   @default("otp") // otp digital assent
+  signerName String
+  signedAt   DateTime @default(now())
+
+  @@unique([contractId, userId])
+  @@index([contractId])
+}
+
+// ── Guarantors (Commercial Code 1243/2021 suretyship; amount-capped) ──────────
+
+model Guarantor {
+  id            String   @id @default(cuid())
+  workerId      String   // the worker being vouched for
+  name          String
+  phone         String
+  relationship  String   @default("family") // family | employer | community | iddir
+  amountCap     Int      @default(0)
+  status        String   @default("pending") // pending | active | declined
+  contractId    String?  // signed guarantor agreement
+  createdAt     DateTime @default(now())
+
+  @@index([workerId])
+}
+
+// ── Consent ledger (Personal Data Protection Proclamation 1321/2024) ──────────
+
+model Consent {
+  id         String   @id @default(cuid())
+  userId     String
+  document   String   // terms | privacy | data_sharing | contractor_agreement
+  version    String   @default("1.0")
+  acceptedAt DateTime @default(now())
+  revokedAt  DateTime?
+
+  @@index([userId])
+}

@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_ENABLE_SUMMARY: "true"
+
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci || npm install
+      - run: npx prisma generate
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Tests (unit + integration, isolated DB)
+        env:
+          JWT_ACCESS_SECRET: ci-access-secret-ci-access-secret-123456
+          JWT_REFRESH_SECRET: ci-refresh-secret-ci-refresh-secret-123
+        run: npm test
+      - name: Dependency audit (fail on high+)
+        run: npm audit --omit=dev --audit-level=high
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci || npm install
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Tests
+        run: npm test
+      - name: Build
+        run: npm run build
+      - name: Dependency audit (fail on high+)
+        run: npm audit --omit=dev --audit-level=high
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [server, web]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build -t serategna-api ./server
+      - name: Build web image
+        run: docker build -t serategna-web ./web

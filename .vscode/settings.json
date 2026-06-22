@@ -1,0 +1,17 @@
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "[prisma]": { "editor.defaultFormatter": "Prisma.prisma" },
+  "tailwindCSS.experimental.classRegex": [
+    ["(?:btn|pill|card)[\\w-]*", "([a-zA-Z0-9\\-:/ ]+)"]
+  ],
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/dist": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/*.db": true
+  }
+}

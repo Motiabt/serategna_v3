@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+.env
+*.db
+*.db-journal
+*.log
+.DS_Store
+.claude/
+coverage/
+
+# mobile/ is its own git repository (committed separately)
+/mobile/
