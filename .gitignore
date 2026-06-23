@@ -4,6 +4,10 @@ build/
 .env
 *.db
 *.db-journal
+*.db.backup*
+*.db-*
+*.sqlite
+*.sqlite3
 *.log
 .DS_Store
 .claude/

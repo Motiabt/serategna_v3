@@ -82,9 +82,16 @@ export const takeRate = (vertical: string, accountType?: string): number => {
 /** Compute the split of a confirmed job total. */
 export function splitJob(total: number, vertical: string, accountType?: string) {
   const rate = takeRate(vertical, accountType);
-  const reserve = Math.round(total * config.economics.guaranteeReserveRate);
   const grossCommission = Math.round(total * rate);
-  const commission = Math.max(0, grossCommission - reserve);
+  // Carve the reserve OUT of the commission (capped at it) so the three parts
+  // always reconcile to `total` exactly — no integer-rounding leak even if the
+  // reserve rate ever exceeds the take rate.
+  const reserve = Math.min(grossCommission, Math.round(total * config.economics.guaranteeReserveRate));
+  const commission = grossCommission - reserve;
   const workerNet = total - grossCommission;
+  // Money-conservation invariant: the ledger must neither create nor destroy birr.
+  if (workerNet + commission + reserve !== total) {
+    throw new Error(`splitJob non-conservative: ${workerNet}+${commission}+${reserve} !== ${total}`);
+  }
   return { total, rate, reserve, commission, workerNet, grossCommission };
 }

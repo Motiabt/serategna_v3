@@ -118,5 +118,10 @@ function renderMarkdown(md: string) {
   });
 }
 function bold(s: string) {
-  return s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Escape ALL HTML first (contract text contains user-supplied job titles,
+  // names and terms — never trust it), then re-introduce only the safe
+  // <strong> markup. Without this, `**` injection is the least of it: raw
+  // <img onerror>/<script> in any field would be stored XSS.
+  const esc = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return esc.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
 }

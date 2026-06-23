@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ClipboardList } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { useI18n } from '../lib/i18n';
 import { Spinner, EmptyState } from '../components/ui';
 import { PageHeader } from './_shared';
 import { JobRow } from './Home';
@@ -10,6 +11,7 @@ import { JobRow } from './Home';
 export function Orders() {
   const nav = useNavigate();
   const { mode } = useAuth();
+  const { t } = useI18n();
   const [jobs, setJobs] = useState<any[] | null>(null);
 
   useEffect(() => {
@@ -19,16 +21,16 @@ export function Orders() {
   if (jobs === null) return <Spinner />;
 
   const groups = [
-    { key: 'active', label: 'Active', filter: (j: any) => !['confirmed', 'cancelled'].includes(j.status) },
-    { key: 'done', label: 'Completed', filter: (j: any) => ['confirmed', 'cancelled'].includes(j.status) },
+    { key: 'active', label: t('activeWord'), filter: (j: any) => !['confirmed', 'cancelled'].includes(j.status) },
+    { key: 'done', label: t('completedWord'), filter: (j: any) => ['confirmed', 'cancelled'].includes(j.status) },
   ];
 
   return (
     <div className="h-full overflow-y-auto pb-6 no-scrollbar">
-      <PageHeader title="My jobs" sub={mode === 'worker' ? 'Jobs you are working' : 'Jobs you posted'} />
+      <PageHeader title={t('myJobs')} sub={mode === 'worker' ? t('jobsYouWork') : t('jobsYouPosted')} />
 
       {jobs.length === 0 && (
-        <EmptyState icon={<ClipboardList className="h-6 w-6" />} title="No jobs yet" sub={mode === 'worker' ? 'Find work in the Jobs tab.' : 'Post a job to get started.'} />
+        <EmptyState icon={<ClipboardList className="h-6 w-6" />} title={t('noJobsYet')} sub={mode === 'worker' ? t('findWorkTab') : t('postJobToStart')} />
       )}
 
       {groups.map((g) => {

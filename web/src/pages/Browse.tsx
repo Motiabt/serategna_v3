@@ -17,7 +17,7 @@ interface Category { key: string; en: string; am: string; om: string; icon: stri
 interface TaxGroup { key: string; roles: { k: string; en: string; am: string; om: string }[] }
 
 export function Browse() {
-  const { lang } = useI18n();
+  const { t, lang } = useI18n();
   const nav = useNavigate();
   const toast = useToast();
   const [cats, setCats] = useState<Category[]>([]);
@@ -41,7 +41,7 @@ export function Browse() {
   async function saveWorker(w: any) {
     const r = await api.post<{ saved: boolean }>('/api/saved', { kind: 'worker', refId: w.userId });
     setSavedCount((c) => (r.saved ? c + 1 : Math.max(0, c - 1)));
-    toast.success(r.saved ? `${w.name?.split(' ')[0]} added to your shortlist` : 'Removed from shortlist');
+    toast.success(r.saved ? `${w.name?.split(' ')[0]} ${t('addedToShortlist')}` : t('removedFromShortlist'));
   }
   async function unsave(userId: string) {
     await api.post('/api/saved', { kind: 'worker', refId: userId });
@@ -71,25 +71,25 @@ export function Browse() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex items-start justify-between px-5 pt-7">
-        <h1 className="text-3xl font-extrabold leading-none text-ink">Search<br />workers</h1>
+        <h1 className="text-3xl font-extrabold leading-none text-ink">{t('search')}<br />{t('workersWord')}</h1>
         <div className="flex items-center gap-2">
           <button onClick={() => { loadShortlist(); setShortlistOpen(true); }} className="btn relative flex h-11 w-11 items-center justify-center rounded-full bg-white p-0 text-ink shadow-card">
             <Bookmark className="h-4 w-4" />
             {savedCount > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-600 px-1 text-[9px] font-bold text-white">{savedCount}</span>}
           </button>
           <button onClick={() => setFilters(true)} className="btn flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-card">
-            <SlidersHorizontal className="h-4 w-4" /> Filters
+            <SlidersHorizontal className="h-4 w-4" /> {t('filtersWord')}
           </button>
         </div>
       </div>
       <div className="flex items-center justify-between px-5 pb-1 pt-2 text-xs">
         <span className="font-medium text-muted">{role ? roleLabel(role) : loc(activeCat, lang)}</span>
-        <span className="text-muted">{workers ? `${workers.length} results` : '…'}</span>
+        <span className="text-muted">{workers ? `${workers.length} ${t('resultsWord')}` : '…'}</span>
       </div>
 
       <div className="flex gap-2 px-5 pt-2">
-        <Toggle active={view === 'cards'} onClick={() => setView('cards')} icon={<Layers className="h-3.5 w-3.5" />} label="Cards" />
-        <Toggle active={view === 'map'} onClick={() => setView('map')} icon={<MapIcon className="h-3.5 w-3.5" />} label="Map" />
+        <Toggle active={view === 'cards'} onClick={() => setView('cards')} icon={<Layers className="h-3.5 w-3.5" />} label={t('cardsWord')} />
+        <Toggle active={view === 'map'} onClick={() => setView('map')} icon={<MapIcon className="h-3.5 w-3.5" />} label={t('mapWord')} />
       </div>
 
       {workers === null ? (
@@ -105,9 +105,9 @@ export function Browse() {
           onLike={(w: any) => saveWorker(w)}
           onSkip={() => undefined}
           onDetails={(w: any) => setDetail(w)}
-          likeLabel="Save to shortlist"
-          emptyTitle="No more workers here"
-          emptySub="Try different filters or reset the stack."
+          likeLabel={t('saveToShortlist')}
+          emptyTitle={t('noMoreWorkers')}
+          emptySub={t('tryDifferentFilters')}
           renderBack={(w: any) => (<><p className="mt-2 text-xs text-white/50">{w.subCity}</p><p className="text-xl font-bold">{w.name}</p></>)}
           renderFront={(w: any, h) => (
             <>
@@ -122,24 +122,24 @@ export function Browse() {
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <span className="flex items-center gap-1 rounded-full bg-ink/85 px-2.5 py-1 text-xs font-semibold text-white"><Star className="h-3 w-3 fill-feature text-feature" /> {w.avgRating?.toFixed(1) ?? '—'}</span>
                 <span className="flex items-center gap-1 rounded-full bg-ink/10 px-2.5 py-1 text-xs font-semibold text-ink"><MapPin className="h-3 w-3" /> {w.subCity}</span>
-                <span className="flex items-center gap-1 rounded-full bg-ink/10 px-2.5 py-1 text-xs font-semibold text-ink"><Briefcase className="h-3 w-3" /> {w.jobsCompleted} jobs</span>
-                {w.tier >= 1 && <span className="rounded-full bg-ink/10 px-2.5 py-1 text-xs font-semibold text-ink">Verified</span>}
+                <span className="flex items-center gap-1 rounded-full bg-ink/10 px-2.5 py-1 text-xs font-semibold text-ink"><Briefcase className="h-3 w-3" /> {w.jobsCompleted} {t('jobsLower')}</span>
+                {w.tier >= 1 && <span className="rounded-full bg-ink/10 px-2.5 py-1 text-xs font-semibold text-ink">{t('verified')}</span>}
               </div>
               <div className="mt-auto flex items-end justify-between gap-3 pt-4">
                 <div className="min-w-0">
                   <p className="truncate text-xs font-medium text-ink/60">{roleLabel(w.roles?.[0]) || catLabel(w.categories?.[0])}</p>
                   <p className="text-2xl font-extrabold capitalize text-ink">{w.band}</p>
-                  <p className="text-sm font-semibold text-ink/70">Score {w.score} · {w.matchScore}% match</p>
+                  <p className="text-sm font-semibold text-ink/70">{t('score')} {w.score} · {w.matchScore}% {t('matchWord')}</p>
                 </div>
-                <button onClick={() => setDetail(w)} className="btn shrink-0 rounded-full bg-ink px-5 py-3 text-sm font-bold text-feature">See details</button>
+                <button onClick={() => setDetail(w)} className="btn shrink-0 rounded-full bg-ink px-5 py-3 text-sm font-bold text-feature">{t('seeDetails')}</button>
               </div>
             </>
           )}
         />
       )}
 
-      <Sheet open={filters} onClose={() => setFilters(false)} title="Filters">
-        <label className="label">Category</label>
+      <Sheet open={filters} onClose={() => setFilters(false)} title={t('filtersWord')}>
+        <label className="label">{t('category')}</label>
         <div className="flex flex-wrap gap-2">
           {cats.map((c) => (
             <button key={c.key} onClick={() => { setCategory(c.key); setRole(''); }} className={`flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold ${category === c.key ? 'bg-ink text-white' : 'bg-white text-muted shadow-soft'}`}>
@@ -147,20 +147,20 @@ export function Browse() {
             </button>
           ))}
         </div>
-        <label className="label mt-4">Specialization</label>
+        <label className="label mt-4">{t('specialization')}</label>
         <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
-          <option value="">Any in {loc(activeCat, lang)}</option>
+          <option value="">{t('anyIn')} {loc(activeCat, lang)}</option>
           {(taxonomy.find((g) => g.key === category)?.roles ?? []).map((r) => (
             <option key={r.k} value={r.k}>{loc(r, lang)}</option>
           ))}
         </select>
         <button onClick={() => setFemaleOnly(!femaleOnly)} className="mt-4 flex w-full items-center justify-between">
-          <span className="text-sm text-ink">Verified-female workers only</span>
+          <span className="text-sm text-ink">{t('verifiedFemaleOnly')}</span>
           <span className={`relative h-6 w-11 rounded-full transition ${femaleOnly ? 'bg-brand-600' : 'bg-sand'}`}>
             <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${femaleOnly ? 'left-[22px]' : 'left-0.5'}`} />
           </span>
         </button>
-        <button onClick={() => setFilters(false)} className="btn-brand mt-5 w-full">Show {workers?.length ?? 0} workers</button>
+        <button onClick={() => setFilters(false)} className="btn-brand mt-5 w-full">{t('showWord')} {workers?.length ?? 0} {t('workersWord')}</button>
       </Sheet>
 
       <Sheet open={!!detail} onClose={() => setDetail(null)}>
@@ -182,7 +182,7 @@ export function Browse() {
             </div>
             {detail.matchScore != null && (
               <div className="mt-3 rounded-2xl bg-brand-50 px-3 py-2">
-                <p className="text-xs font-semibold text-brand-700">{detail.matchScore}% match · why this rank</p>
+                <p className="text-xs font-semibold text-brand-700">{detail.matchScore}% {t('matchWord')} · {t('whyThisRank')}</p>
                 {detail.matchReasons?.length > 0 && (
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {detail.matchReasons.map((r: string) => (
@@ -195,25 +195,25 @@ export function Browse() {
             {detail.badges?.length > 0 && <div className="mt-3"><BadgeRow badges={detail.badges} /></div>}
             <div className="mt-3 flex flex-wrap gap-2">
               <Pill tone="amber"><Star className="h-3 w-3" /> {detail.avgRating?.toFixed(1) ?? '—'}</Pill>
-              <Pill><Briefcase className="h-3 w-3" /> {detail.jobsCompleted} jobs</Pill>
+              <Pill><Briefcase className="h-3 w-3" /> {detail.jobsCompleted} {t('jobsLower')}</Pill>
               {detail.distanceKm != null && <Pill tone="sky"><MapPin className="h-3 w-3" /> {detail.distanceKm} km</Pill>}
-              {detail.femaleClientOnly && <Pill tone="rose">Female clients</Pill>}
+              {detail.femaleClientOnly && <Pill tone="rose">{t('femaleClients')}</Pill>}
             </div>
-            <button onClick={() => window.open(`/p/${detail.userId}`, '_blank')} className="btn-ghost mt-3 w-full text-sm">View verified public profile ↗</button>
+            <button onClick={() => window.open(`/p/${detail.userId}`, '_blank')} className="btn-ghost mt-3 w-full text-sm">{t('viewPublicProfile')}</button>
             {(detail.roles?.length ?? 0) > 0 && (
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {detail.roles.map((rk: string) => <span key={rk} className="pill bg-brand-50 text-brand-700">{roleLabel(rk)}</span>)}
               </div>
             )}
-            <button onClick={() => { setDetail(null); nav('/app/post'); }} className="btn-brand mt-5 w-full">Post a job &amp; invite to apply</button>
+            <button onClick={() => { setDetail(null); nav('/app/post'); }} className="btn-brand mt-5 w-full">{t('postAndInvite')}</button>
           </div>
         )}
       </Sheet>
 
       {/* Shortlist (saved workers, persisted) */}
-      <Sheet open={shortlistOpen} onClose={() => setShortlistOpen(false)} title="Your shortlist">
+      <Sheet open={shortlistOpen} onClose={() => setShortlistOpen(false)} title={t('yourShortlist')}>
         {shortlist === null ? <Spinner /> : shortlist.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">Swipe right (♥) on a worker to save them here.</p>
+          <p className="py-6 text-center text-sm text-muted">{t('shortlistEmpty')}</p>
         ) : (
           <div className="space-y-2">
             {shortlist.map((w) => (
@@ -223,7 +223,7 @@ export function Browse() {
                   <p className="truncate text-sm font-semibold text-ink">{w.name}</p>
                   <p className="text-xs text-muted">{roleLabel(w.roles?.[0]) || catLabel(w.categories?.[0])} · {w.subCity} · {w.score}</p>
                 </div>
-                <button onClick={() => { setShortlistOpen(false); nav('/app/post'); }} className="rounded-full bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white">Hire</button>
+                <button onClick={() => { setShortlistOpen(false); nav('/app/post'); }} className="rounded-full bg-brand-600 px-3 py-1.5 text-xs font-semibold text-white">{t('hireWord')}</button>
                 <button onClick={() => unsave(w.userId)} className="flex h-8 w-8 items-center justify-center rounded-full bg-sand text-rose-600"><Trash2 className="h-4 w-4" /></button>
               </div>
             ))}

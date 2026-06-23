@@ -1,5 +1,14 @@
 import { PrismaClient } from '@prisma/client';
 
+// ── Scaling / connection pooling ─────────────────────────────────────────────
+// SQLite (dev) is a single file — no pool. For production Postgres, size the
+// pool in DATABASE_URL, e.g.
+//   postgresql://…?connection_limit=10&pool_timeout=20
+// and front it with PgBouncer (transaction mode) when running many instances so
+// the database's max_connections isn't exhausted. Prisma reads these params from
+// the URL; no code change is needed to switch engines beyond the datasource
+// `provider` in schema.prisma. The server drains this pool on SIGTERM (index.ts).
+
 // Defense-in-depth: the most sensitive columns are GLOBALLY omitted from every
 // query result, so they can never accidentally leak — even if a future endpoint
 // returns a raw user row. Reads that genuinely need them (auth 2FA verify, the

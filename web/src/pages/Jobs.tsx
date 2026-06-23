@@ -8,13 +8,13 @@ import { Spinner, EmptyState, Sheet, CardSkeletons } from '../components/ui';
 import { CategoryIcon } from '../components/icons';
 import { SwipeDeck } from '../components/SwipeDeck';
 import { PageHeader } from './_shared';
-import { JobRow, iconFor, EMP_LABEL } from './Home';
+import { JobRow, iconFor, EMP_KEY } from './Home';
 
 interface Category { key: string; en: string; am: string; om: string; icon: string }
 
 export function Jobs() {
   const nav = useNavigate();
-  const { lang } = useI18n();
+  const { t, lang } = useI18n();
   const [cats, setCats] = useState<Category[]>([]);
   const [active, setActive] = useState<string>('all');
   const [feed, setFeed] = useState<any[] | null>(null);
@@ -49,11 +49,11 @@ export function Jobs() {
     setBidError('');
     try {
       await api.post(`/api/jobs/${bidTarget.id}/bids`, { amount: Number(bidAmount), message: bidMsg });
-      setBidDone(`Bid placed on “${bidTarget.title}”`);
+      setBidDone(`${t('bidPlacedOn')} “${bidTarget.title}”`);
       setBidTarget(null);
       setTimeout(() => setBidDone(''), 2500);
     } catch (e) {
-      setBidError(e instanceof ApiError ? e.message : 'Failed to bid');
+      setBidError(e instanceof ApiError ? e.message : t('failedToBid'));
     } finally {
       setBidBusy(false);
     }
@@ -73,8 +73,8 @@ export function Jobs() {
     <div className="flex h-full flex-col overflow-hidden">
       <div className="flex items-start justify-between px-5 pt-7">
         <div>
-          <h1 className="text-2xl font-extrabold text-ink">Jobs near you</h1>
-          <p className="text-sm text-muted">Swipe to bid · skip what doesn't fit</p>
+          <h1 className="text-2xl font-extrabold text-ink">{t('nearbyJobs')}</h1>
+          <p className="text-sm text-muted">{t('swipeToBid')}</p>
         </div>
         <button onClick={() => { loadSaved(); setSavedOpen(true); }} className="btn relative flex h-11 w-11 items-center justify-center rounded-full bg-white p-0 text-ink shadow-card">
           <Bookmark className="h-4 w-4" />
@@ -85,12 +85,12 @@ export function Jobs() {
       {bidDone && <div className="mx-5 mt-2 info">{bidDone}</div>}
 
       <div className="flex gap-2 px-5 pt-2">
-        <Toggle active={view === 'deck'} onClick={() => setView('deck')} icon={<Layers className="h-3.5 w-3.5" />} label="Swipe" />
-        <Toggle active={view === 'list'} onClick={() => setView('list')} icon={<List className="h-3.5 w-3.5" />} label="List" />
+        <Toggle active={view === 'deck'} onClick={() => setView('deck')} icon={<Layers className="h-3.5 w-3.5" />} label={t('swipe')} />
+        <Toggle active={view === 'list'} onClick={() => setView('list')} icon={<List className="h-3.5 w-3.5" />} label={t('listView')} />
       </div>
 
       <div className="flex gap-2 overflow-x-auto px-5 pb-1 pt-2 no-scrollbar">
-        <Chip label="All" active={active === 'all'} onClick={() => setActive('all')} />
+        <Chip label={t('allWord')} active={active === 'all'} onClick={() => setActive('all')} />
         {cats.map((c) => (
           <Chip key={c.key} label={loc(c, lang)} icon={c.icon} active={active === c.key} onClick={() => setActive(c.key)} />
         ))}
@@ -101,7 +101,7 @@ export function Jobs() {
       ) : view === 'list' ? (
         <div className="flex-1 space-y-3 overflow-y-auto px-5 pt-3 no-scrollbar">
           {filtered.length === 0 ? (
-            <EmptyState icon={<Briefcase className="h-6 w-6" />} title="No open jobs" sub="Widen your radius in Profile." />
+            <EmptyState icon={<Briefcase className="h-6 w-6" />} title={t('noOpenJobs')} sub={t('widenRadiusProfile')} />
           ) : (
             filtered.map((j) => <JobRow key={j.id} job={j} onClick={() => nav(`/app/job/${j.id}`)} />)
           )}
@@ -110,12 +110,12 @@ export function Jobs() {
         <SwipeDeck
           items={filtered}
           keyOf={(j: any) => j.id}
-          likeLabel="Bid"
+          likeLabel={t('bidWord')}
           onLike={(j: any) => openBid(j)}
           onSkip={() => undefined}
           onDetails={(j: any) => nav(`/app/job/${j.id}`)}
-          emptyTitle="No open jobs here"
-          emptySub="Widen your radius or change category."
+          emptyTitle={t('noOpenJobsHere')}
+          emptySub={t('widenRadiusCategory')}
           renderBack={(j: any) => (<><p className="mt-2 text-xs text-white/50">{j.subCity}</p><p className="text-xl font-bold">{j.title}</p></>)}
           renderFront={(j: any, h) => (
             <>
@@ -125,7 +125,7 @@ export function Jobs() {
                 </span>
                 <div className="flex items-center gap-2">
                   {j.employmentType && j.employmentType !== 'gig' && (
-                    <span className="rounded-full bg-ink/85 px-3 py-1 text-xs font-bold text-feature">{EMP_LABEL[j.employmentType] ?? j.employmentType}{j.positions > 1 ? ` · ${j.positions}` : ''}</span>
+                    <span className="rounded-full bg-ink/85 px-3 py-1 text-xs font-bold text-feature">{EMP_KEY[j.employmentType] ? t(EMP_KEY[j.employmentType]) : j.employmentType}{j.positions > 1 ? ` · ${j.positions}` : ''}</span>
                   )}
                   <button onClick={() => saveJob(j)} className="flex h-9 w-9 items-center justify-center rounded-full bg-ink/90 text-feature"><Bookmark className="h-4 w-4" /></button>
                 </div>
@@ -133,8 +133,8 @@ export function Jobs() {
               <h2 className="mt-4 line-clamp-2 text-2xl font-extrabold leading-tight text-ink">{j.title}</h2>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <span className="flex items-center gap-1 rounded-full bg-ink/10 px-2.5 py-1 text-xs font-semibold text-ink"><MapPin className="h-3 w-3" /> {j.subCity}{j.distanceKm != null ? ` · ${j.distanceKm} km` : ''}</span>
-                <span className="rounded-full bg-ink/10 px-2.5 py-1 text-xs font-semibold text-ink">{j.bidCount ?? 0} bids</span>
-                <span className="rounded-full bg-ink/85 px-2.5 py-1 text-xs font-semibold text-feature">{j.matchScore}% match</span>
+                <span className="rounded-full bg-ink/10 px-2.5 py-1 text-xs font-semibold text-ink">{j.bidCount ?? 0} {t('bidsWord')}</span>
+                <span className="rounded-full bg-ink/85 px-2.5 py-1 text-xs font-semibold text-feature">{j.matchScore}% {t('matchWord')}</span>
                 {closesIn(j.expiresAt) && (
                   <span className="flex items-center gap-1 rounded-full bg-amber-accent/15 px-2.5 py-1 text-xs font-semibold text-amber-accent"><Clock className="h-3 w-3" /> {closesIn(j.expiresAt)}</span>
                 )}
@@ -143,9 +143,9 @@ export function Jobs() {
                 <div className="min-w-0">
                   <p className="truncate text-xs font-medium text-ink/60">{j.clientName}</p>
                   <p className="text-2xl font-extrabold text-ink">{j.agreedPrice ? etb(j.agreedPrice) : `${etb(j.priceBandLow)}–${j.priceBandHigh}`}</p>
-                  <p className="text-sm font-semibold text-ink/70">Fair-price band</p>
+                  <p className="text-sm font-semibold text-ink/70">{t('fairPriceBand')}</p>
                 </div>
-                <button onClick={h.like} className="btn shrink-0 rounded-full bg-ink px-5 py-3 text-sm font-bold text-feature"><Gavel className="h-4 w-4" /> Bid</button>
+                <button onClick={h.like} className="btn shrink-0 rounded-full bg-ink px-5 py-3 text-sm font-bold text-feature"><Gavel className="h-4 w-4" /> {t('bidWord')}</button>
               </div>
             </>
           )}
@@ -153,25 +153,25 @@ export function Jobs() {
       )}
 
       {/* One-tap quick bid */}
-      <Sheet open={!!bidTarget} onClose={() => setBidTarget(null)} title="Place your bid">
+      <Sheet open={!!bidTarget} onClose={() => setBidTarget(null)} title={t('placeYourBid')}>
         {bidTarget && (
           <>
             <p className="mb-1 text-sm font-semibold text-ink">{bidTarget.title}</p>
-            <p className="mb-3 text-xs text-muted">Fair-price band: {etb(bidTarget.priceBandLow)}–{bidTarget.priceBandHigh}</p>
-            <label className="label">Your price (ETB)</label>
+            <p className="mb-3 text-xs text-muted">{t('fairPriceBand')}: {etb(bidTarget.priceBandLow)}–{bidTarget.priceBandHigh}</p>
+            <label className="label">{t('yourPriceEtb')}</label>
             <input className="input text-lg font-bold" inputMode="numeric" value={bidAmount} onChange={(e) => setBidAmount(e.target.value.replace(/\D/g, ''))} />
-            <label className="label mt-3">Message (optional)</label>
-            <input className="input" value={bidMsg} onChange={(e) => setBidMsg(e.target.value)} placeholder="I can start today at 2pm" />
+            <label className="label mt-3">{t('messageOptional')}</label>
+            <input className="input" value={bidMsg} onChange={(e) => setBidMsg(e.target.value)} placeholder={t('bidPlaceholder')} />
             {bidError && <p className="mt-2 text-sm text-rose-600">{bidError}</p>}
-            <button onClick={submitBid} disabled={bidBusy || !bidAmount} className="btn-brand mt-4 w-full"><Gavel className="h-4 w-4" /> Submit bid</button>
+            <button onClick={submitBid} disabled={bidBusy || !bidAmount} className="btn-brand mt-4 w-full"><Gavel className="h-4 w-4" /> {t('submitBid')}</button>
           </>
         )}
       </Sheet>
 
       {/* Saved jobs (persisted) */}
-      <Sheet open={savedOpen} onClose={() => setSavedOpen(false)} title="Saved jobs">
+      <Sheet open={savedOpen} onClose={() => setSavedOpen(false)} title={t('savedJobs')}>
         {saved === null ? <Spinner /> : saved.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">Tap the bookmark on a job card to save it here.</p>
+          <p className="py-6 text-center text-sm text-muted">{t('savedJobsEmpty')}</p>
         ) : (
           <div className="space-y-2">
             {saved.map((j) => (

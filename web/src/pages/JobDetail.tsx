@@ -5,16 +5,18 @@ import { api, ApiError } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { useToast } from '../lib/toast';
 import { etb, relTime } from '../lib/format';
+import { useI18n } from '../lib/i18n';
 import { Avatar, Pill, Spinner, Sheet } from '../components/ui';
 import { CategoryIcon } from '../components/icons';
 import { SafetyButton } from '../components/SafetyButton';
 import { MapView } from '../components/MapView';
-import { iconFor, EMP_LABEL } from './Home';
+import { iconFor, EMP_KEY } from './Home';
 
 export function JobDetail() {
   const { id } = useParams();
   const nav = useNavigate();
   const { user } = useAuth();
+  const { t } = useI18n();
   const toast = useToast();
   const [job, setJob] = useState<any>(null);
   const [error, setError] = useState('');
@@ -87,7 +89,7 @@ export function JobDetail() {
           <ChevronLeft className="h-5 w-5" />
         </button>
         <Pill tone="brand">{job.status}</Pill>
-        {job.employmentType && job.employmentType !== 'gig' && <Pill tone="lime">{EMP_LABEL[job.employmentType] ?? job.employmentType}{job.positions > 1 ? ` · ${job.positions}` : ''}</Pill>}
+        {job.employmentType && job.employmentType !== 'gig' && <Pill tone="lime">{EMP_KEY[job.employmentType] ? t(EMP_KEY[job.employmentType]) : job.employmentType}{job.positions > 1 ? ` · ${job.positions}` : ''}</Pill>}
         {job.paymentMode === 'escrow' && job.escrowState !== 'none' && <Pill tone="sky">escrow: {job.escrowState}</Pill>}
         {job.guarantorRequired && <Pill tone="amber">ዋስ required</Pill>}
       </div>

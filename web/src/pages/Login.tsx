@@ -94,10 +94,10 @@ export function Login() {
         <div className="mt-10 flex flex-col items-center text-center">
           <BrandMark size={72} />
           <h1 className="mt-6 text-3xl font-extrabold leading-tight text-ink">
-            {flow === 'login' ? 'Welcome back' : 'Join Serategna'}
+            {flow === 'login' ? t('welcomeBack') : t('joinSerategna')}
           </h1>
           <p className="mt-2 max-w-[17rem] text-sm leading-relaxed text-muted">
-            {t('tagline')}. The work-to-credit platform for Ethiopia's real economy.
+            {t('tagline')}. {t('loginSubtitle')}
           </p>
         </div>
 
@@ -106,7 +106,7 @@ export function Login() {
           {step === 'phone' && (
             <div className="space-y-3 animate-fade-up">
               {flow === 'register' && (
-                <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
+                <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('fullName')} />
               )}
               <div className="relative">
                 <Phone className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -118,7 +118,7 @@ export function Login() {
                   <div className="grid grid-cols-2 gap-2">
                     {(['client', 'worker'] as const).map((r) => (
                       <button key={r} onClick={() => setRole(r)} className={`rounded-2xl border px-4 py-3 text-sm font-semibold ${role === r ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-white/70 bg-white/70 text-muted'}`}>
-                        {r === 'client' ? 'Hire workers' : 'Find work'}
+                        {r === 'client' ? t('hireWorkers') : t('findWork')}
                       </button>
                     ))}
                   </div>
@@ -133,14 +133,14 @@ export function Login() {
                     <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${acceptTerms ? 'border-brand-600 bg-brand-600 text-white' : 'border-black/15 bg-white'}`}>
                       {acceptTerms && <Check className="h-3.5 w-3.5" />}
                     </span>
-                    <span className="text-xs text-muted">I accept the <a href="/api/legal/terms" target="_blank" className="font-semibold text-brand-700">Terms</a> & <a href="/api/legal/privacy" target="_blank" className="font-semibold text-brand-700">Privacy Policy</a>. I understand I work as an independent contractor.</span>
+                    <span className="text-xs text-muted">{t('iAcceptThe')} <a href="/api/legal/terms" target="_blank" className="font-semibold text-brand-700">{t('termsWord')}</a> & <a href="/api/legal/privacy" target="_blank" className="font-semibold text-brand-700">{t('privacyWord')}</a>. {t('contractorNote')}</span>
                   </button>
                 </>
               )}
 
               {error && <p className="text-sm text-rose-600">{error}</p>}
               <button className="btn-brand w-full" disabled={busy || !phone || (flow === 'register' && (!name || !acceptTerms))} onClick={() => requestOtp()}>
-                Send code <ArrowRight className="h-4 w-4" />
+                {t('sendCode')} <ArrowRight className="h-4 w-4" />
               </button>
             </div>
           )}
@@ -148,7 +148,7 @@ export function Login() {
           {step === 'code' && (
             <div className="space-y-3 animate-fade-up">
               <p className="text-center text-sm text-muted">
-                Code sent to <span className="font-semibold text-ink">{phone}</span>
+                {t('codeSentTo')} <span className="font-semibold text-ink">{phone}</span>
               </p>
               <input
                 className="input text-center text-2xl font-bold tracking-[0.4em]"
@@ -159,14 +159,14 @@ export function Login() {
               />
               {devCode && (
                 <p className="rounded-2xl bg-brand-50 px-3 py-2 text-center text-xs text-brand-700">
-                  Dev mode — code auto-filled: <b>{devCode}</b>
+                  {t('devAutofill')}: <b>{devCode}</b>
                 </p>
               )}
               {error && <p className="text-sm text-rose-600">{error}</p>}
               <button className="btn-brand w-full" disabled={busy || code.length !== 6} onClick={submit}>
                 {flow === 'login' ? t('signIn') : t('signUp')} <ArrowRight className="h-4 w-4" />
               </button>
-              <button className="w-full text-center text-sm text-muted" onClick={() => setStep('phone')}>← Change number</button>
+              <button className="w-full text-center text-sm text-muted" onClick={() => setStep('phone')}>← {t('changeNumber')}</button>
             </div>
           )}
         </div>
@@ -177,10 +177,10 @@ export function Login() {
             className="w-full text-center text-sm text-muted"
             onClick={() => { setFlow(flow === 'login' ? 'register' : 'login'); setStep('phone'); setError(''); }}
           >
-            {flow === 'login' ? (<>New here? <span className="font-semibold text-brand-700">Create an account</span></>) : (<>Have an account? <span className="font-semibold text-brand-700">Sign in</span></>)}
+            {flow === 'login' ? (<>{t('newHere')} <span className="font-semibold text-brand-700">{t('signUp')}</span></>) : (<>{t('haveAccount')} <span className="font-semibold text-brand-700">{t('signIn')}</span></>)}
           </button>
 
-          <p className="mb-2 mt-5 text-center text-[11px] font-semibold uppercase tracking-wide text-muted">Try a demo account</p>
+          <p className="mb-2 mt-5 text-center text-[11px] font-semibold uppercase tracking-wide text-muted">{t('tryDemo')}</p>
           <div className="grid grid-cols-2 gap-2.5">
             {DEMO.map((d) => (
               <button key={d.phone} onClick={() => demoLogin(d.phone)} className="action-chip">

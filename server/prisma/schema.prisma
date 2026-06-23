@@ -33,6 +33,8 @@ model User {
   faydaNumber  String?
   totpSecret   String?  // authenticator-app 2FA secret (base32)
   totpEnabled  Boolean  @default(false)
+  disabled       Boolean  @default(false) // admin-disabled account (login blocked)
+  disabledReason String? // optional moderation/audit note
   createdAt    DateTime @default(now())
 
   workerProfile WorkerProfile?
@@ -218,6 +220,27 @@ model Bid {
   createdAt DateTime @default(now())
 
   @@index([jobId])
+  @@index([workerId]) // "my bids" + data-export + worker history
+}
+
+// Earned-wage advance: a worker borrows against verified income and repays
+// automatically from upcoming confirmed jobs. Flat transparent fee, no
+// compounding interest (anti-exploitation). Serategna books it notionally;
+// a licensed partner funds disbursement in production.
+model Advance {
+  id          String   @id @default(cuid())
+  workerId    String
+  principal   Int      // disbursed to the worker
+  fee         Int      // flat one-time fee
+  total       Int      // principal + fee (amount to repay)
+  outstanding Int      // remaining balance
+  status      String   @default("active") // active | repaid
+  method      String   @default("telebirr") // disbursement channel
+  disbursedAt DateTime @default(now())
+  repaidAt    DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([workerId, status])
 }
 
 model Message {
@@ -456,6 +479,7 @@ model Notification {
   createdAt DateTime @default(now())
 
   @@index([userId])
+  @@index([userId, read]) // unread-count + notifications list (hot path)
 }
 
 // ── Business / company profiles (license upload → profile, point 4) ──────────
@@ -605,4 +629,42 @@ model Consent {
   revokedAt  DateTime?
 
   @@index([userId])
+}
+
+// ── Partner Lending API (the lending moat) ───────────────────────────────────
+// Integrated banks/MFIs hold a hashed API key (PartnerKey); workers grant
+// scoped, expiring consent (LendingConsent) before any report can be pulled.
+// See server/src/routes/partner.ts and server/src/lib/attestation.ts.
+
+model PartnerKey {
+  id         String   @id @default(cuid())
+  name       String
+  slug       String   @unique
+  keyHash    String   @unique // HMAC of the API key — keys are never stored in clear
+  scopes     String   @default("reports:read")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime?
+
+  consents   LendingConsent[]
+}
+
+model LendingConsent {
+  id           String      @id @default(cuid())
+  code         String      @unique // worker-issued, human-shareable consent code
+  workerId     String
+  audience     String      @default("self_link") // partner slug, or "self_link"
+  partnerId    String?
+  scope        String      @default("income reliability")
+  purpose      String      @default("credit_assessment")
+  status       String      @default("active") // active | expired | revoked
+  accessCount  Int         @default(0)
+  lastAccessAt DateTime?
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime    @default(now())
+  partner      PartnerKey? @relation(fields: [partnerId], references: [id])
+
+  @@index([status])
+  @@index([workerId])
 }

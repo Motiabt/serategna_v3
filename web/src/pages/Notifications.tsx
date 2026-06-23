@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Bell, Clock, Check, Briefcase, FileText, Wallet, ShieldAlert, Gavel } from 'lucide-react';
 import { api } from '../lib/api';
 import { relTime } from '../lib/format';
+import { useI18n } from '../lib/i18n';
 import { Spinner, EmptyState } from '../components/ui';
 import { BackHeader } from './_shared';
 
@@ -12,6 +13,7 @@ const ICONS: Record<string, any> = {
 
 export function Notifications() {
   const nav = useNavigate();
+  const { t } = useI18n();
   const [data, setData] = useState<any>(null);
 
   const load = () => api.get<any>('/api/notifications').then(setData).catch(() => setData({ notifications: [], reminders: [] }));
@@ -31,21 +33,21 @@ export function Notifications() {
 
   return (
     <div className="h-full overflow-y-auto pb-6 no-scrollbar">
-      <BackHeader title="Notifications" />
+      <BackHeader title={t('notificationsTitle')} />
       <div className="flex justify-end px-5 pt-1">
-        <button onClick={markAll} className="text-xs font-semibold text-brand-700">Mark all read</button>
+        <button onClick={markAll} className="text-xs font-semibold text-brand-700">{t('markAllRead')}</button>
       </div>
 
       {data.reminders?.length > 0 && (
         <div className="px-5 pt-3">
-          <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Reminders</h2>
+          <h2 className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">{t('remindersTitle')}</h2>
           <div className="space-y-2">
             {data.reminders.map((n: any) => (
               <div key={n.id} className="info">
                 <Clock className="mt-0.5 h-4 w-4 shrink-0" />
                 <div>
                   <p className="font-semibold text-accent-700">{n.title}</p>
-                  <p className="text-xs">{n.body} · due {relTime(n.dueAt)}</p>
+                  <p className="text-xs">{n.body} · {t('dueWord')} {relTime(n.dueAt)}</p>
                 </div>
               </div>
             ))}
@@ -55,7 +57,7 @@ export function Notifications() {
 
       <div className="space-y-2 px-5 pt-4">
         {(data.notifications ?? []).length === 0 ? (
-          <EmptyState icon={<Bell className="h-6 w-6" />} title="No notifications yet" sub="Job updates, bids, contracts and reminders will appear here." />
+          <EmptyState icon={<Bell className="h-6 w-6" />} title={t('noNotifications')} sub={t('noNotificationsSub')} />
         ) : (
           data.notifications.map((n: any) => {
             const Icon = ICONS[n.type] ?? Bell;

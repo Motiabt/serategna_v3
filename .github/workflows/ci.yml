@@ -52,6 +52,8 @@ jobs:
       - run: npm ci || npm install
       - name: Typecheck
         run: npx tsc --noEmit
+      - name: i18n keys (every t('key') must be defined)
+        run: npm run check:i18n
       - name: Tests
         run: npm test
       - name: Build

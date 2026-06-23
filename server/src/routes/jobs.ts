@@ -6,6 +6,7 @@ import { distanceKm } from '../lib/geo.js';
 import { ACCOUNTS, post, splitJob } from '../lib/ledger.js';
 import { paymentAdapter } from '../lib/payments.js';
 import { confirmEscrowFunding } from '../lib/escrow.js';
+import { applyAdvanceRepayment } from '../lib/advance.js';
 import { employmentType } from '../lib/employment.js';
 import { centroid } from '../lib/geo.js';
 import { matchScore } from '../lib/matching.js';
@@ -555,6 +556,21 @@ jobsRouter.post(
   }),
 );
 
+// Tell the worker how much of a confirmed payment repaid their advance.
+async function notifyAdvanceRepayment(workerId: string, repay: { applied: number; outstanding: number }) {
+  const cleared = repay.outstanding <= 0;
+  await notify({
+    userId: workerId,
+    templateKey: 'system',
+    title: cleared ? 'Advance fully repaid 🎉' : 'Advance repayment',
+    body: cleared
+      ? `ETB ${repay.applied.toLocaleString()} cleared your advance. You can take a new one anytime.`
+      : `ETB ${repay.applied.toLocaleString()} went to your advance · ETB ${repay.outstanding.toLocaleString()} left.`,
+    type: 'payout',
+    link: '/app/credit',
+  }).catch(() => undefined);
+}
+
 // ── Confirm completion (client) → release escrow split, update score ─────────
 jobsRouter.post(
   '/:id/confirm',
@@ -568,6 +584,7 @@ jobsRouter.post(
 
     const client = await prisma.user.findUnique({ where: { id: job.clientId }, select: { accountType: true } });
     const split = splitJob(job.agreedPrice, job.vertical, client?.accountType);
+    let repay: { applied: number; outstanding: number } | null = null;
     await prisma.$transaction(async (tx) => {
       await post(
         [
@@ -612,11 +629,14 @@ jobsRouter.post(
           completionRate: assigned > 0 ? completed / assigned : 1,
         },
       });
+      // Auto-repay any active earned-wage advance from this earning.
+      repay = await applyAdvanceRepayment(tx, job.workerId!, split.workerNet);
     });
 
     const score = await snapshotScore(job.workerId);
     await notify({ userId: job.workerId, templateKey: 'job.confirmed_paid', payload: { amount: split.workerNet } });
-    res.json({ ok: true, escrowState: 'released', split, score });
+    if (repay) await notifyAdvanceRepayment(job.workerId, repay);
+    res.json({ ok: true, escrowState: 'released', split, score, advanceRepayment: repay });
   }),
 );
 
@@ -659,6 +679,7 @@ jobsRouter.post(
     if (job.status !== 'paid') throw new HttpError(400, 'Job is not awaiting finalization');
 
     const amount = job.agreedPrice ?? 0;
+    let repay: { applied: number; outstanding: number } | null = null;
     await prisma.$transaction(async (tx) => {
       // The task is done and the EMPLOYEE has confirmed: the agreed birr is now
       // treated as credited. Mark it confirmed (which immediately recognises it
@@ -678,9 +699,12 @@ jobsRouter.post(
         const add = Math.round((amount * goal.ratePct) / 100);
         await tx.savingsGoal.update({ where: { userId: job.workerId! }, data: { savedAmount: { increment: add } } });
       }
+      // Auto-repay any active earned-wage advance from this confirmed income.
+      repay = await applyAdvanceRepayment(tx, job.workerId!, amount);
     });
     // Recompute score/income now that this job counts — verified income updates immediately.
     const score = await snapshotScore(job.workerId);
+    if (repay) await notifyAdvanceRepayment(job.workerId, repay);
     await notify({ userId: job.workerId, templateKey: 'job.confirmed_paid', title: 'Income credited', body: `ETB ${amount.toLocaleString()} added to your verified income. New balance: ETB ${(score.totalEarned ?? 0).toLocaleString()}.`, type: 'payout', link: '/app/wallet' });
     await notify({ userId: job.clientId, templateKey: 'job.finalized', title: 'Job finalized', body: 'The worker confirmed payment. Leave a rating.', type: 'job', link: `/app/job/${job.id}` });
     res.json({ ok: true, status: 'confirmed', creditedAmount: amount, verifiedIncome: score.totalEarned ?? 0, score });

@@ -32,6 +32,9 @@ export const config = {
   payouts: {
     dailyCap: num('PAYOUT_DAILY_CAP', 10000), // spec E1
   },
+  // HMAC secret for signing Verified Income reports & hashing partner API keys
+  // (lib/attestation.ts). Must be a strong random value in production.
+  attestationSecret: process.env.ATTESTATION_SECRET ?? 'dev-attestation-secret',
 };
 
 // Fail fast in production on insecure defaults (spec E1).
@@ -39,6 +42,7 @@ if (config.isProd) {
   const weak = [
     ['JWT_ACCESS_SECRET', config.jwt.accessSecret],
     ['JWT_REFRESH_SECRET', config.jwt.refreshSecret],
+    ['ATTESTATION_SECRET', config.attestationSecret],
   ].filter(([, v]) => !v || v.length < 32 || v.includes('dev-'));
   if (weak.length) {
     throw new Error(

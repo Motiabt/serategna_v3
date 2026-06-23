@@ -54,9 +54,13 @@ adminRouter.get(
   '/business',
   ah(async (_req, res) => {
     const fourWeeksAgo = new Date(Date.now() - 28 * 86400000);
-    const [confirmed, recentConfirmed, activeTier1, commission, reserve, disputes, totalJobs] =
+    // Aggregate in the DB instead of loading every confirmed job into memory —
+    // groupBy returns one row per (client, worker) pair, not per job, so this
+    // scales to the 100k-job target.
+    const [agg, pairsGrouped, recentConfirmed, activeTier1, commission, reserve, disputes, totalJobs] =
       await Promise.all([
-        prisma.job.findMany({ where: { status: 'confirmed' }, select: { agreedPrice: true, clientId: true, workerId: true } }),
+        prisma.job.aggregate({ where: { status: 'confirmed' }, _sum: { agreedPrice: true }, _count: { _all: true } }),
+        prisma.job.groupBy({ by: ['clientId', 'workerId'], where: { status: 'confirmed' }, _count: { _all: true } }),
         prisma.job.count({ where: { status: 'confirmed', confirmedAt: { gte: fourWeeksAgo } } }),
         prisma.user.count({ where: { isWorker: true, tier: { gte: 1 } } }),
         balance(ACCOUNTS.PLATFORM_COMMISSION),
@@ -65,19 +69,16 @@ adminRouter.get(
         prisma.job.count(),
       ]);
 
-    const grossValue = confirmed.reduce((a, j) => a + (j.agreedPrice ?? 0), 0);
-    const jobsDone = confirmed.length;
+    const grossValue = agg._sum.agreedPrice ?? 0;
+    const jobsDone = agg._count._all;
     const avgJobValue = jobsDone ? Math.round(grossValue / jobsDone) : 0;
     const blendedTakeRate = grossValue ? (commission + reserve) / grossValue : 0;
     const netCommissionPerJob = jobsDone ? Math.round(commission / jobsDone) : 0;
     const jobsPerWorkerWeek = activeTier1 ? recentConfirmed / activeTier1 / 4 : 0;
 
-    // repeat-pair on-platform share (leakage inverse)
-    const pairs: Record<string, number> = {};
-    for (const j of confirmed) pairs[`${j.clientId}:${j.workerId}`] = (pairs[`${j.clientId}:${j.workerId}`] ?? 0) + 1;
-    const pairKeys = Object.keys(pairs);
-    const repeatShare = pairKeys.length
-      ? pairKeys.filter((k) => pairs[k] > 1).length / pairKeys.length
+    // repeat-pair on-platform share (leakage inverse) — counted from grouped pairs
+    const repeatShare = pairsGrouped.length
+      ? pairsGrouped.filter((p) => p._count._all > 1).length / pairsGrouped.length
       : 0;
 
     const exitCriteria = [

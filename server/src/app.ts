@@ -85,6 +85,9 @@ const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 600, standardHeade
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 40, standardHeaders: true });
 // Tighter cap specifically on OTP issuance (anti-SMS-bombing / brute force).
 const otpLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true });
+// Strict cap on money-moving mutations (advances, payouts, subscription billing)
+// — limits abuse / automated draining well below the general API budget.
+const moneyLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 15, standardHeaders: true });
 
 // API versioning: `/api/v1/*` is the versioned surface; `/api/*` is kept as a
 // back-compat alias. Rewriting the prefix here lets every router serve both.
@@ -110,6 +113,11 @@ app.get('/ready', async (_req, res) => {
 if (process.env.NODE_ENV !== 'test') {
   app.use('/api/auth/otp', otpLimiter);
   app.use('/api/auth', authLimiter);
+  // Money-moving endpoints get a much stricter budget (mounted before the
+  // general limiter so the tighter cap applies to these paths).
+  app.use('/api/credit/advance', moneyLimiter);
+  app.use('/api/wallet/payouts', moneyLimiter);
+  app.use('/api/subscription/subscribe', moneyLimiter);
   app.use('/api', apiLimiter);
 }
 app.use('/api/auth', authRouter);

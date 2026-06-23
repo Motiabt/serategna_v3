@@ -10,15 +10,27 @@ import { useI18n, loc } from '../lib/i18n';
 import { PageHeader } from './_shared';
 
 interface Category { key: string; en: string; am: string; om: string; icon: string; vertical: string }
-interface EmpType { key: string; label: string; desc: string; defaultRate: string; group?: boolean; requiresEscrow: boolean }
+interface EmpType { key: string; label: string; am: string; om: string; desc: string; descAm: string; descOm: string; defaultRate: string; group?: boolean; requiresEscrow: boolean }
 interface SubCity { name: string; lat: number; lng: number }
 interface RoleOpt { k: string; en: string; am: string; om: string; t: string }
+
+// Domestic duties + day-off options carry a stable English value (sent to the
+// API) plus an i18n key for the localized label.
+const DUTY_OPTIONS: { v: string; k: 'dutyCleaning' | 'dutyCooking' | 'dutyLaundry' | 'dutyChildcare' | 'dutyElderly' | 'dutyErrands' | 'dutyDishwashing' | 'dutyGardening' }[] = [
+  { v: 'Cleaning', k: 'dutyCleaning' }, { v: 'Cooking', k: 'dutyCooking' }, { v: 'Laundry & ironing', k: 'dutyLaundry' },
+  { v: 'Childcare', k: 'dutyChildcare' }, { v: 'Elderly care', k: 'dutyElderly' }, { v: 'Shopping/errands', k: 'dutyErrands' },
+  { v: 'Dishwashing', k: 'dutyDishwashing' }, { v: 'Gardening', k: 'dutyGardening' },
+];
+const DAYOFF_OPTIONS: { v: string; k: 'dowSunday' | 'dowSaturday' | 'dowMonday' | 'dowNoneNegotiable' }[] = [
+  { v: 'Sunday', k: 'dowSunday' }, { v: 'Saturday', k: 'dowSaturday' }, { v: 'Monday', k: 'dowMonday' }, { v: 'None (negotiable)', k: 'dowNoneNegotiable' },
+];
+const RATE_KEY = { monthly: 'rateMonthly', weekly: 'rateWeekly', daily: 'rateDaily', hourly: 'rateHourly' } as const;
 
 export function PostJob() {
   const nav = useNavigate();
   const [params] = useSearchParams();
   const preset = params.get('preset');
-  const { lang } = useI18n();
+  const { t, lang } = useI18n();
   const [cats, setCats] = useState<Category[]>([]);
   const [empTypes, setEmpTypes] = useState<EmpType[]>([]);
   const [subCities, setSubCities] = useState<SubCity[]>([]);
@@ -56,7 +68,6 @@ export function PostJob() {
 
   const DOMESTIC = ['home_cleaning', 'care_domestic'];
   const isDomestic = DOMESTIC.includes(category);
-  const DUTY_OPTIONS = ['Cleaning', 'Cooking', 'Laundry & ironing', 'Childcare', 'Elderly care', 'Shopping/errands', 'Dishwashing', 'Gardening'];
   const floor = wage ? (wage[rateType] ?? 0) : 0;
   const belowFloor = pricingMode === 'fixed' && floor > 0 && Number(fixedPrice || 0) > 0 && Number(fixedPrice) < floor;
 
@@ -109,11 +120,11 @@ export function PostJob() {
 
   function pickType(key: string) {
     setEmploymentType(key);
-    const t = empTypes.find((e) => e.key === key);
-    if (t) {
-      setRateType(t.defaultRate);
+    const picked = empTypes.find((e) => e.key === key);
+    if (picked) {
+      setRateType(picked.defaultRate);
       setFormality(key === 'permanent' || key === 'contract' ? 'formal' : 'informal');
-      if (!t.group) setPositions(1);
+      if (!picked.group) setPositions(1);
     }
   }
 
@@ -164,7 +175,7 @@ export function PostJob() {
     } catch (e) {
       const err = e as ApiError;
       if (err.status === 402) { setSubSheet(true); api.get<any>('/api/subscription').then(setSub).catch(() => undefined); }
-      else setPostError(err.message || 'Could not post job');
+      else setPostError(err.message || t('couldNotPost'));
     } finally {
       setBusy(false);
     }
@@ -184,30 +195,30 @@ export function PostJob() {
 
   return (
     <div className="h-full overflow-y-auto pb-6 no-scrollbar">
-      <PageHeader title="Post a job" sub="Any kind of work — from a one-off gig to a permanent hire" />
+      <PageHeader title={t('post')} sub={t('postJobSub')} />
 
       <div className="space-y-5 px-5 pt-2">
         {preset === 'housemaid' && (
           <div className="rounded-2xl border border-brand-100 bg-brand-50 p-4">
-            <p className="text-sm font-bold text-brand-800">Hiring a permanent housemaid</p>
-            <p className="mt-1 text-xs text-brand-700">No delala fee. A guarantor (ዋስ) is required, a fair minimum wage applies, and you'll agree terms in-app then sign the legal contract in person. Up to 4 housemaid posts/year.</p>
+            <p className="text-sm font-bold text-brand-800">{t('hiringHousemaid')}</p>
+            <p className="mt-1 text-xs text-brand-700">{t('housemaidPresetNote')}</p>
           </div>
         )}
         {/* Subscription status */}
         {sub && (
           sub.status === 'active' ? (
             <div className="flex items-center justify-between rounded-2xl bg-brand-50 px-4 py-2.5 text-xs text-brand-700">
-              <span className="flex items-center gap-1.5"><BadgeCheck className="h-4 w-4" /> {sub.plan} plan active</span>
-              <span className="font-semibold">{sub.postsRemaining}/{sub.postLimit} posts left this month</span>
+              <span className="flex items-center gap-1.5"><BadgeCheck className="h-4 w-4" /> {sub.plan} {t('planActive')}</span>
+              <span className="font-semibold">{sub.postsRemaining}/{sub.postLimit} {t('postsLeftMonth')}</span>
             </div>
           ) : sub.freePostAvailable ? (
             <div className="flex items-center justify-between rounded-2xl bg-emerald-500/10 px-4 py-2.5 text-xs font-semibold text-emerald-700">
-              <span className="flex items-center gap-1.5"><BadgeCheck className="h-4 w-4" /> Your first job post is free</span>
-              <span className="text-muted">then ETB 100/mo</span>
+              <span className="flex items-center gap-1.5"><BadgeCheck className="h-4 w-4" /> {t('firstPostFree')}</span>
+              <span className="text-muted">{t('thenEtbMonth')}</span>
             </div>
           ) : (
             <button onClick={() => setSubSheet(true)} className="flex w-full items-center justify-between rounded-2xl bg-ink px-4 py-3 text-sm font-semibold text-white">
-              <span>Subscribe to post jobs</span>
+              <span>{t('subscribeToPost')}</span>
               <span className="text-feature">ETB 100/mo →</span>
             </button>
           )
@@ -215,28 +226,28 @@ export function PostJob() {
 
         {/* Employment type */}
         <div>
-          <label className="label">Type of work</label>
+          <label className="label">{t('typeOfWork')}</label>
           <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
             {empTypes.map((e) => (
               <button key={e.key} onClick={() => pickType(e.key)} className={`shrink-0 rounded-2xl border px-3.5 py-2.5 text-left ${employmentType === e.key ? 'border-brand-500 bg-brand-50' : 'border-white/70 bg-white/70'}`}>
-                <p className={`text-xs font-bold ${employmentType === e.key ? 'text-brand-700' : 'text-ink'}`}>{e.label}</p>
+                <p className={`text-xs font-bold ${employmentType === e.key ? 'text-brand-700' : 'text-ink'}`}>{loc({ en: e.label, am: e.am, om: e.om }, lang)}</p>
               </button>
             ))}
           </div>
-          {et && <p className="mt-1.5 text-xs text-muted">{et.desc}</p>}
+          {et && <p className="mt-1.5 text-xs text-muted">{loc({ en: et.desc, am: et.descAm, om: et.descOm }, lang)}</p>}
         </div>
 
         {/* Group hire positions */}
         {et?.group && (
           <div>
-            <label className="label">How many workers? ({positions})</label>
+            <label className="label">{t('howManyWorkers')} ({positions})</label>
             <input type="range" min={2} max={20} value={positions} onChange={(e) => setPositions(Number(e.target.value))} className="w-full accent-brand-600" />
           </div>
         )}
 
         {/* Category (taxonomy group) — searchable picker keeps 20+ groups tidy */}
         <div>
-          <label className="label">Category</label>
+          <label className="label">{t('category')}</label>
           <button type="button" onClick={() => { setCatQuery(''); setCatPicker(true); }} className="flex w-full items-center justify-between rounded-2xl border border-black/[0.07] bg-[#f1f5f9] px-4 py-3.5 text-left">
             <span className="flex min-w-0 items-center gap-2.5">
               {(() => { const sc = cats.find((c) => c.key === category); return sc ? (
@@ -244,7 +255,7 @@ export function PostJob() {
                   <CategoryIcon icon={sc.icon} className="h-5 w-5 shrink-0 text-brand-600" />
                   <span className="truncate text-sm font-semibold text-ink">{loc(sc, lang)}</span>
                 </>
-              ) : <span className="text-sm text-muted">Choose a category</span>; })()}
+              ) : <span className="text-sm text-muted">{t('chooseCategory')}</span>; })()}
             </span>
             <ChevronDown className="h-4 w-4 shrink-0 text-muted" />
           </button>
@@ -253,9 +264,9 @@ export function PostJob() {
         {/* Specialization role */}
         {roleOpts.length > 0 && (
           <div>
-            <label className="label">Specialization (optional)</label>
+            <label className="label">{t('specializationOptional')}</label>
             <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
-              <option value="">Any specialization</option>
+              <option value="">{t('anySpecialization')}</option>
               {roleOpts.map((r) => (
                 <option key={r.k} value={r.k}>{loc(r, lang)}</option>
               ))}
@@ -266,61 +277,61 @@ export function PostJob() {
         {/* Title + AI assist */}
         <div>
           <div className="mb-1.5 flex items-center justify-between">
-            <span className="label mb-0">What do you need?</span>
+            <span className="label mb-0">{t('whatDoYouNeed')}</span>
             <button onClick={aiDraft} disabled={aiBusy} className="flex items-center gap-1 rounded-full bg-accent-50 px-3 py-1 text-xs font-semibold text-accent-700">
-              {aiBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Smart draft
+              {aiBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} {t('smartDraft')}
             </button>
           </div>
-          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Deep clean 2-bedroom apartment" />
+          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('phDeepClean')} />
         </div>
 
         <div>
-          <label className="label">Details</label>
-          <textarea className="input min-h-[90px] resize-none" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Add specifics, or tap “Smart draft”." />
+          <label className="label">{t('detailsWord')}</label>
+          <textarea className="input min-h-[90px] resize-none" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t('phAddSpecifics')} />
         </div>
 
         {/* Formality + duration */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="label">Formality</label>
+            <label className="label">{t('formalityWord')}</label>
             <div className="grid grid-cols-2 gap-1.5">
               {(['informal', 'formal'] as const).map((f) => (
-                <button key={f} onClick={() => setFormality(f)} className={`rounded-2xl border px-2 py-2.5 text-xs font-semibold capitalize ${formality === f ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-white/70 bg-white/70 text-muted'}`}>{f}</button>
+                <button key={f} onClick={() => setFormality(f)} className={`rounded-2xl border px-2 py-2.5 text-xs font-semibold ${formality === f ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-white/70 bg-white/70 text-muted'}`}>{f === 'informal' ? t('informalWord') : t('formalWord')}</button>
               ))}
             </div>
           </div>
           <div>
-            <label className="label">Duration</label>
-            <input className="input" value={durationLabel} onChange={(e) => setDurationLabel(e.target.value)} placeholder="e.g. 3 months" />
+            <label className="label">{t('durationWord')}</label>
+            <input className="input" value={durationLabel} onChange={(e) => setDurationLabel(e.target.value)} placeholder={t('ph3Months')} />
           </div>
         </div>
 
         {/* Start / finish time */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="label flex items-center gap-1"><Clock className="h-3 w-3" /> Start</label>
+            <label className="label flex items-center gap-1"><Clock className="h-3 w-3" /> {t('startWord')}</label>
             <input type="datetime-local" className="input" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
           </div>
           <div>
-            <label className="label flex items-center gap-1"><Clock className="h-3 w-3" /> Finish</label>
+            <label className="label flex items-center gap-1"><Clock className="h-3 w-3" /> {t('finishWord')}</label>
             <input type="datetime-local" className="input" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
           </div>
         </div>
 
         {/* Application deadline — job auto-removed once it passes */}
         <div>
-          <label className="label flex items-center gap-1"><Clock className="h-3 w-3" /> Application deadline</label>
+          <label className="label flex items-center gap-1"><Clock className="h-3 w-3" /> {t('applicationDeadline')}</label>
           <input type="datetime-local" className="input" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
-          <p className="mt-1 text-xs text-muted">{expiresAt ? 'This post closes and is removed automatically when the deadline passes.' : 'Optional — defaults to 14 days. Expired posts are removed automatically.'}</p>
+          <p className="mt-1 text-xs text-muted">{expiresAt ? t('deadlineSetNote') : t('deadlineDefaultNote')}</p>
         </div>
 
         {/* Rate type (for wages) */}
         {(employmentType === 'permanent' || employmentType === 'contract' || employmentType === 'short_term') && (
           <div>
-            <label className="label">Pay rate</label>
+            <label className="label">{t('payRate')}</label>
             <div className="grid grid-cols-4 gap-1.5">
               {(['monthly', 'weekly', 'daily', 'hourly'] as const).map((r) => (
-                <button key={r} onClick={() => setRateType(r)} className={`rounded-2xl border px-2 py-2.5 text-xs font-semibold capitalize ${rateType === r ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-white/70 bg-white/70 text-muted'}`}>{r}</button>
+                <button key={r} onClick={() => setRateType(r)} className={`rounded-2xl border px-2 py-2.5 text-xs font-semibold ${rateType === r ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-white/70 bg-white/70 text-muted'}`}>{t(RATE_KEY[r])}</button>
               ))}
             </div>
           </div>
@@ -329,38 +340,38 @@ export function PostJob() {
         {/* Housemaid / domestic-contract fields */}
         {isDomestic && (
           <div className="card space-y-4 p-4">
-            <p className="flex items-center gap-1.5 text-sm font-bold text-ink"><Home className="h-4 w-4 text-brand-600" /> Domestic contract details</p>
-            <ToggleRow label="Live-in (room & board provided)" value={liveIn} onChange={setLiveIn} />
+            <p className="flex items-center gap-1.5 text-sm font-bold text-ink"><Home className="h-4 w-4 text-brand-600" /> {t('domesticContractDetails')}</p>
+            <ToggleRow label={t('liveInLabel')} value={liveIn} onChange={setLiveIn} />
             <div>
-              <label className="label">Duties</label>
+              <label className="label">{t('dutiesWord')}</label>
               <div className="flex flex-wrap gap-2">
-                {DUTY_OPTIONS.map((d) => {
-                  const on = duties.includes(d);
+                {DUTY_OPTIONS.map(({ v, k }) => {
+                  const on = duties.includes(v);
                   return (
-                    <button key={d} onClick={() => setDuties(on ? duties.filter((x) => x !== d) : [...duties, d])} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${on ? 'bg-brand-600 text-white' : 'bg-sand text-muted'}`}>{d}</button>
+                    <button key={v} onClick={() => setDuties(on ? duties.filter((x) => x !== v) : [...duties, v])} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${on ? 'bg-brand-600 text-white' : 'bg-sand text-muted'}`}>{t(k)}</button>
                   );
                 })}
               </div>
             </div>
             <div>
-              <label className="label">Day off</label>
+              <label className="label">{t('dayOff')}</label>
               <select className="input" value={daysOff} onChange={(e) => setDaysOff(e.target.value)}>
-                {['Sunday', 'Saturday', 'Monday', 'None (negotiable)'].map((d) => <option key={d}>{d}</option>)}
+                {DAYOFF_OPTIONS.map(({ v, k }) => <option key={v} value={v}>{t(k)}</option>)}
               </select>
             </div>
-            <ToggleRow label="Require a guarantor (የስራ ዋስ / wastina)" value={guarantorRequired} onChange={setGuarantorRequired} />
+            <ToggleRow label={t('requireGuarantor')} value={guarantorRequired} onChange={setGuarantorRequired} />
           </div>
         )}
 
         <div>
-          <label className="label">Sub-city</label>
+          <label className="label">{t('subCityWord')}</label>
           <select className="input" value={subCity} onChange={(e) => { setSubCity(e.target.value); setPin(null); }}>
             {subCities.map((s) => <option key={s.name}>{s.name}</option>)}
           </select>
         </div>
 
         <div>
-          <label className="label">Location {pin && <span className="text-brand-600">· pinned</span>}</label>
+          <label className="label">{t('locationWord')} {pin && <span className="text-brand-600">· {t('pinnedWord')}</span>}</label>
           <MapView
             height={180}
             center={pin ?? subCities.find((s) => s.name === subCity) ?? undefined}
@@ -371,7 +382,7 @@ export function PostJob() {
         {band && (
           <div className="info">
             <Info className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>Fair-price band for {subCity}: <b>{etb(band.low)} – {etb(band.high)}</b>. Workers bid within range; you negotiate in chat.</span>
+            <span>{t('fairBandForPre')} {subCity}: <b>{etb(band.low)} – {etb(band.high)}</b>. {t('fairBandPost')}</span>
           </div>
         )}
 
@@ -380,56 +391,56 @@ export function PostJob() {
           <div className={`flex items-start gap-2 rounded-2xl px-4 py-3 text-sm ${belowFloor ? 'bg-rose-50 text-rose-700' : 'bg-brand-50 text-brand-700'}`}>
             <Scale className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
-              Living-wage floor: <b>{etb(floor)} {rateType}</b>{liveIn ? ' (live-in cash floor)' : ''}.
-              {belowFloor ? ' Your price is below survival level — please raise it.' : ' Fair pay protects workers from exploitation.'}
+              {t('livingWageFloor')} <b>{etb(floor)} {rateType}</b>{liveIn ? ' ' + t('liveInCashFloor') : ''}.
+              {belowFloor ? ' ' + t('belowSurvival') : ' ' + t('fairPayProtects')}
             </span>
           </div>
         )}
 
         <div>
-          <label className="label">Pricing</label>
+          <label className="label">{t('pricingWord')}</label>
           <div className="grid grid-cols-2 gap-2">
             {(['bid', 'fixed'] as const).map((m) => (
               <button key={m} onClick={() => setPricingMode(m)} className={`rounded-2xl border px-4 py-3 text-sm font-semibold ${pricingMode === m ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-white/70 bg-white/70 text-muted'}`}>
-                {m === 'bid' ? 'Open to bids' : 'Fixed price'}
+                {m === 'bid' ? t('openToBids') : t('fixedPriceWord')}
               </button>
             ))}
           </div>
           {pricingMode === 'fixed' && (
-            <input className="input mt-2" inputMode="numeric" value={fixedPrice} onChange={(e) => setFixedPrice(e.target.value.replace(/\D/g, ''))} placeholder={`Amount in ETB ${rateType !== 'fixed' ? `(${rateType})` : ''}`} />
+            <input className="input mt-2" inputMode="numeric" value={fixedPrice} onChange={(e) => setFixedPrice(e.target.value.replace(/\D/g, ''))} placeholder={`${t('amountInEtb')} ${rateType !== 'fixed' ? `(${rateType})` : ''}`} />
           )}
         </div>
 
         {/* Transparent pricing (anti-delala) */}
         {fee && (
           <div className="rounded-2xl border border-brand-100 bg-white p-4">
-            <p className="flex items-center gap-1.5 text-sm font-bold text-ink"><ShieldCheck className="h-4 w-4 text-brand-600" /> Transparent pay — no broker cut</p>
+            <p className="flex items-center gap-1.5 text-sm font-bold text-ink"><ShieldCheck className="h-4 w-4 text-brand-600" /> {t('transparentPay')}</p>
             <div className="mt-2 flex items-center justify-between text-sm">
-              <span className="text-muted">Worker keeps</span>
+              <span className="text-muted">{t('workerKeeps')}</span>
               <span className="font-extrabold text-brand-600">{etb(fee.amount)} (100%)</span>
             </div>
             <div className="mt-1 flex items-center justify-between text-sm">
-              <span className="text-muted">Delala / broker commission</span>
+              <span className="text-muted">{t('brokerCommission')}</span>
               <span className="font-semibold text-ink">ETB 0</span>
             </div>
-            <p className="mt-2 text-xs text-muted">You pay the worker directly via Telebirr/CBE Birr/cash. Serategna never holds your money — we're funded by a flat subscription, not a cut of wages.</p>
+            <p className="mt-2 text-xs text-muted">{t('payDirectlyNote2')}</p>
           </div>
         )}
 
         {postError && <p className="text-sm text-rose-600">{postError}</p>}
-        {belowFloor && <p className="text-xs text-rose-600">Raise the price to at least {etb(floor)} to post.</p>}
+        {belowFloor && <p className="text-xs text-rose-600">{t('raisePricePre')} {etb(floor)} {t('raisePricePost')}</p>}
 
         <button onClick={submit} disabled={busy || !title || !category || belowFloor} className="btn-brand w-full">
-          <Check className="h-4 w-4" /> Post job
+          <Check className="h-4 w-4" /> {t('postJobBtn')}
         </button>
-        <p className="text-center text-xs text-muted">Funded by a flat employer subscription — workers keep 100% of their pay.</p>
+        <p className="text-center text-xs text-muted">{t('fundedFlatSub')}</p>
       </div>
 
       {/* Category picker — searchable, scrollable list (scales past 20 groups) */}
-      <Sheet open={catPicker} onClose={() => setCatPicker(false)} title="Choose a category">
+      <Sheet open={catPicker} onClose={() => setCatPicker(false)} title={t('chooseCategory')}>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-          <input autoFocus className="input pl-9" placeholder="Search categories…" value={catQuery} onChange={(e) => setCatQuery(e.target.value)} />
+          <input autoFocus className="input pl-9" placeholder={t('searchCategories')} value={catQuery} onChange={(e) => setCatQuery(e.target.value)} />
         </div>
         <div className="mt-3 max-h-[55vh] space-y-1 overflow-y-auto no-scrollbar">
           {cats
@@ -449,21 +460,21 @@ export function PostJob() {
               </button>
             ))}
           {cats.filter((c) => { const q = catQuery.trim().toLowerCase(); return !q || loc(c, lang).toLowerCase().includes(q) || c.en.toLowerCase().includes(q); }).length === 0 && (
-            <p className="py-6 text-center text-sm text-muted">No category matches “{catQuery}”.</p>
+            <p className="py-6 text-center text-sm text-muted">{t('noCategoryMatch')} “{catQuery}”.</p>
           )}
         </div>
       </Sheet>
 
       {/* Subscribe sheet */}
-      <Sheet open={subSheet} onClose={() => setSubSheet(false)} title="Employer subscription">
-        <p className="text-sm text-muted">Post up to <b>5 jobs / month</b>. A flat fee funds the platform — Serategna takes <b>no commission</b> on wages.</p>
+      <Sheet open={subSheet} onClose={() => setSubSheet(false)} title={t('employerSubscription')}>
+        <p className="text-sm text-muted">{t('subSheetNote')}</p>
         <div className="mt-4 space-y-2">
           <button onClick={() => subscribe('monthly')} className="card flex w-full items-center justify-between p-4 text-left">
-            <div><p className="font-bold text-ink">Monthly</p><p className="text-xs text-muted">5 posts / month</p></div>
+            <div><p className="font-bold text-ink">{t('rateMonthly')}</p><p className="text-xs text-muted">{t('fivePostsMonth')}</p></div>
             <span className="text-lg font-extrabold text-brand-600">ETB 100<span className="text-xs font-normal text-muted">/mo</span></span>
           </button>
           <button onClick={() => subscribe('annual')} className="card flex w-full items-center justify-between p-4 text-left">
-            <div><p className="font-bold text-ink">Annual <span className="rounded-full bg-feature px-2 py-0.5 text-[10px] text-ink">save 17%</span></p><p className="text-xs text-muted">5 posts / month, billed yearly</p></div>
+            <div><p className="font-bold text-ink">{t('annualWord')} <span className="rounded-full bg-feature px-2 py-0.5 text-[10px] text-ink">{t('save17')}</span></p><p className="text-xs text-muted">{t('fivePostsYearly')}</p></div>
             <span className="text-lg font-extrabold text-brand-600">ETB 1000<span className="text-xs font-normal text-muted">/yr</span></span>
           </button>
         </div>

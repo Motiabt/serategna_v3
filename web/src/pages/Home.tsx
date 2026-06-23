@@ -118,10 +118,10 @@ function ModeRow() {
 }
 
 function CategoryGrid({ cats, onPick }: { cats: Category[]; onPick: (key: string) => void }) {
-  const { lang } = useI18n();
+  const { t, lang } = useI18n();
   return (
     <div className="px-5 pt-5">
-      <SectionTitle>Categories</SectionTitle>
+      <SectionTitle>{t('categories')}</SectionTitle>
       <div className="grid grid-cols-4 gap-2.5">
         {cats.slice(0, 8).map((c) => (
           <button key={c.key} onClick={() => onPick(c.key)} className="tile">
@@ -234,13 +234,13 @@ function WorkerHome() {
     <div className="h-full overflow-y-auto pb-6 no-scrollbar">
       <ModeRow />
       <HeroHeader
-        greeting="Good day,"
-        bigLabel="Verified income"
+        greeting={t('goodDay')}
+        bigLabel={t('verifiedIncome')}
         bigValue={etb(data.score?.totalEarned ?? 0)}
-        sub={`${data.score?.jobsCompleted ?? 0} paid jobs · Score ${data.score?.score} · paid directly`}
+        sub={`${data.score?.jobsCompleted ?? 0} ${t('paidJobs')} · ${t('score')} ${data.score?.score} · ${t('paidDirectly')}`}
         actions={[
-          { label: 'My income', icon: ArrowDownToLine, onClick: () => nav('/app/wallet'), primary: true },
-          { label: 'Find work', icon: Search, onClick: () => nav('/app/jobs') },
+          { label: t('myIncome'), icon: ArrowDownToLine, onClick: () => nav('/app/wallet'), primary: true },
+          { label: t('findWork'), icon: Search, onClick: () => nav('/app/jobs') },
         ]}
       />
 
@@ -252,7 +252,7 @@ function WorkerHome() {
               <span className="text-lg font-extrabold leading-none text-brand-700">{data.score?.score}</span>
             </div>
             <div>
-              <p className="text-sm font-bold capitalize text-ink">{data.score?.band} score</p>
+              <p className="text-sm font-bold capitalize text-ink">{data.score?.band} {t('scoreWord')}</p>
               <p className="text-xs text-muted">{data.score?.projection}</p>
             </div>
           </div>
@@ -280,7 +280,7 @@ function WorkerHome() {
           {(data.feed ?? []).slice(0, 4).map((j: any) => (
             <JobRow key={j.id} job={j} onClick={() => nav(`/app/job/${j.id}`)} />
           ))}
-          {(data.feed ?? []).length === 0 && <p className="card p-4 text-sm text-muted">No nearby jobs right now.</p>}
+          {(data.feed ?? []).length === 0 && <p className="card p-4 text-sm text-muted">{t('noNearbyJobs')}</p>}
         </div>
       </div>
     </div>
@@ -289,6 +289,7 @@ function WorkerHome() {
 
 function ClientHome() {
   const nav = useNavigate();
+  const { t } = useI18n();
   const [data, setData] = useState<any>(null);
 
   useEffect(() => {
@@ -309,13 +310,13 @@ function ClientHome() {
     <div className="h-full overflow-y-auto pb-6 no-scrollbar">
       <ModeRow />
       <HeroHeader
-        greeting="Good morning,"
-        bigLabel="Active jobs today"
+        greeting={t('goodMorning')}
+        bigLabel={t('activeJobsToday')}
         bigValue={<>{String(active.length).padStart(2, '0')}<span className="text-2xl text-white/50"> / {(data.mine ?? []).length}</span></>}
-        sub="Pay directly · workers keep 100% · no broker"
+        sub={t('payDirectlyNote')}
         actions={[
-          { label: 'Post a job', icon: Plus, onClick: () => nav('/app/post'), primary: true },
-          { label: 'Browse', icon: Search, onClick: () => nav('/app/browse') },
+          { label: t('post'), icon: Plus, onClick: () => nav('/app/post'), primary: true },
+          { label: t('browse'), icon: Search, onClick: () => nav('/app/browse') },
         ]}
       />
 
@@ -323,14 +324,14 @@ function ClientHome() {
       <div className="px-4 pt-4">
         <button onClick={() => nav('/app/post?preset=housemaid')} className="card w-full overflow-hidden p-0 text-left">
           <div className="bg-gradient-to-br from-brand-500 to-brand-700 p-5 text-white">
-            <p className="text-xs font-semibold uppercase tracking-wide text-white/70">Permanent housemaids</p>
-            <p className="mt-0.5 text-xl font-extrabold leading-tight">Hire a trusted housemaid</p>
-            <p className="mt-1 text-sm text-white/85">Skip the delala. No broker fee, vetted & guarantor-backed, fair guaranteed wage.</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-white/70">{t('permanentHousemaids')}</p>
+            <p className="mt-0.5 text-xl font-extrabold leading-tight">{t('hireTrustedHousemaid')}</p>
+            <p className="mt-1 text-sm text-white/85">{t('housemaidPitch')}</p>
           </div>
           <div className="grid grid-cols-3 gap-2 p-4 text-center">
-            <MiniProp icon={Star} label="Vetted & rated" />
-            <MiniProp icon={ShieldCheck} label="Guarantor (ዋስ)" />
-            <MiniProp icon={ArrowRight} label="No broker fee" />
+            <MiniProp icon={Star} label={t('vettedRated')} />
+            <MiniProp icon={ShieldCheck} label={t('guarantor')} />
+            <MiniProp icon={ArrowRight} label={t('noBrokerFee')} />
           </div>
         </button>
       </div>
@@ -339,8 +340,8 @@ function ClientHome() {
 
       {featured && (
         <div className="px-5 pt-6">
-          <SectionTitle action={<button className="text-xs font-semibold text-brand-700" onClick={() => nav('/app/browse')}>See all</button>}>
-            Top rated near you
+          <SectionTitle action={<button className="text-xs font-semibold text-brand-700" onClick={() => nav('/app/browse')}>{t('viewAll')}</button>}>
+            {t('topRatedNearYou')}
           </SectionTitle>
           <button onClick={() => nav('/app/browse')} className="card flex w-full items-center gap-3 p-4 text-left">
             <Avatar name={featured.name} size={48} />
@@ -359,14 +360,14 @@ function ClientHome() {
       )}
 
       <div className="px-5 pt-6">
-        <SectionTitle action={<button className="text-xs font-semibold text-brand-700" onClick={() => nav('/app/orders')}>See all</button>}>
-          Active jobs
+        <SectionTitle action={<button className="text-xs font-semibold text-brand-700" onClick={() => nav('/app/orders')}>{t('viewAll')}</button>}>
+          {t('activeJobs')}
         </SectionTitle>
         <div className="space-y-3">
           {active.slice(0, 4).map((j: any) => (
             <JobRow key={j.id} job={j} onClick={() => nav(`/app/job/${j.id}`)} showStatus />
           ))}
-          {active.length === 0 && <p className="card p-4 text-sm text-muted">No active jobs — post one to get started.</p>}
+          {active.length === 0 && <p className="card p-4 text-sm text-muted">{t('noActiveJobs')}</p>}
         </div>
       </div>
     </div>
@@ -374,6 +375,7 @@ function ClientHome() {
 }
 
 export function JobRow({ job, onClick, showStatus }: { job: any; onClick?: () => void; showStatus?: boolean }) {
+  const { t } = useI18n();
   const pct = job.priceBandHigh ? Math.min(100, Math.round(((job.agreedPrice ?? job.priceBandLow) / job.priceBandHigh) * 100)) : 40;
   return (
     <button onClick={onClick} className="card w-full p-4 text-left active:scale-[0.99]">
@@ -386,7 +388,7 @@ export function JobRow({ job, onClick, showStatus }: { job: any; onClick?: () =>
           <p className="flex items-center gap-1 text-xs text-muted">
             <MapPin className="h-3 w-3" /> {job.subCity}
             {job.distanceKm != null && ` · ${job.distanceKm} km`}
-            {job.bidCount != null && ` · ${job.bidCount} bids`}
+            {job.bidCount != null && ` · ${job.bidCount} ${t('bidsWord')}`}
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {job.company && (
@@ -397,8 +399,8 @@ export function JobRow({ job, onClick, showStatus }: { job: any; onClick?: () =>
             )}
             {job.employmentType && job.employmentType !== 'gig' && (
               <span className="inline-flex items-center gap-1 rounded-full bg-accent-50 px-2 py-0.5 text-[10px] font-semibold text-accent-700">
-                {EMP_LABEL[job.employmentType] ?? job.employmentType}
-                {job.positions > 1 && ` · ${job.positions} workers`}
+                {EMP_KEY[job.employmentType] ? t(EMP_KEY[job.employmentType]) : job.employmentType}
+                {job.positions > 1 && ` · ${job.positions} ${t('workersWord')}`}
               </span>
             )}
             {closesIn(job.expiresAt) && (
@@ -428,6 +430,7 @@ export function iconFor(cat: string) {
   return GROUP_ICON[cat] ?? 'briefcase';
 }
 
-export const EMP_LABEL: Record<string, string> = {
-  gig: 'Gig', short_term: 'Short-run', contract: 'Contract', permanent: 'Permanent', group_hire: 'Group hire',
+// Employment-type → i18n key, so job-type badges localize with the UI.
+export const EMP_KEY: Record<string, 'empGig' | 'empShortTerm' | 'empContract' | 'empPermanent' | 'empGroupHire'> = {
+  gig: 'empGig', short_term: 'empShortTerm', contract: 'empContract', permanent: 'empPermanent', group_hire: 'empGroupHire',
 };
