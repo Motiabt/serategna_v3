@@ -7,6 +7,9 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["omitApi"]
+  // "native" covers local dev; "debian-openssl-3.0.x" matches the node:22-slim
+  // runtime image so the engine is bundled at build time (no runtime download).
+  binaryTargets   = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
