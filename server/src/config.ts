@@ -6,7 +6,8 @@ function num(key: string, fallback: number): number {
 }
 
 export const config = {
-  env: process.env.NODE_ENV ?? 'development',
+  // env: process.env.IS_PRODUCTION ?? 'development',
+  env: 'development',
   port: num('PORT', 4000),
   isProd: process.env.NODE_ENV === 'production',
   jwt: {
