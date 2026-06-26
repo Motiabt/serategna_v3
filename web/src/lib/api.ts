@@ -29,7 +29,8 @@ export class ApiError extends Error {
 async function refreshAccess(): Promise<boolean> {
   const refresh = tokens.refresh;
   if (!refresh) return false;
-  const res = await fetch(`${BASE}/api/auth/refresh`, {
+  const refreshUrl = `${BASE}/api/auth/refresh`.replace(/([^:]\/)\/+/g, "$1");
+  const res = await fetch(refreshUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refreshToken: refresh }),
@@ -50,8 +51,8 @@ async function request<T>(
     ...(options.headers as Record<string, string>),
   };
   if (tokens.access) headers.Authorization = `Bearer ${tokens.access}`;
-
-  const res = await fetch(`${BASE}${path}`, { ...options, headers });
+  const fullUrl = `${BASE}${path}`.replace(/([^:]\/)\/+/g, "$1");
+  const res = await fetch(fullUrl, { ...options, headers });
 
   if (res.status === 401 && retry && tokens.refresh) {
     if (await refreshAccess()) return request<T>(path, options, false);
