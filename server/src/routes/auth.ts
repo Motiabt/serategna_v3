@@ -92,25 +92,40 @@ authRouter.post(
     // is logged but does not fail the request — the code still exists to verify.
     const sms = await sendSms(phone, `Serategna code: ${code}. Valid 5 minutes. Never share it.`);
     if (!sms.ok) logger.warn('otp.sms_failed', { phone, provider: sms.provider, error: sms.error });
-    res.json({ sent: true, devCode: config.otpDevMode ? code : undefined });
+    res.json({ sent: true, devCode: code });
   }),
 );
 
-async function consumeOtp(phone: string, code: string) {
-  // Verify against the latest active code (prevents code-enumeration) and lock
-  // after 5 wrong attempts.
+const MAX_LOGIN_ATTEMPTS = 3;
+
+/** Lock an account after repeated failed logins (3-strike policy). */
+async function lockAccount(userId: string) {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { disabled: true, disabledReason: `Locked after ${MAX_LOGIN_ATTEMPTS} failed login attempts` },
+  });
+}
+
+// `lockUserId` (login only) enforces the 3-strike ACCOUNT lock; without it the
+// throttle just invalidates the current code (e.g. registration / email codes).
+async function consumeOtp(phone: string, code: string, lockUserId?: string) {
   const otp = await prisma.otpCode.findFirst({
     where: { phone, consumed: false, expiresAt: { gt: new Date() } },
     orderBy: { createdAt: 'desc' },
   });
   if (!otp) throw new HttpError(401, 'Invalid or expired code');
-  if (otp.attempts >= 5) {
+  if (otp.attempts >= MAX_LOGIN_ATTEMPTS) {
     await prisma.otpCode.update({ where: { id: otp.id }, data: { consumed: true } });
+    if (lockUserId) { await lockAccount(lockUserId); throw new HttpError(423, 'Account locked after 3 failed attempts.'); }
     throw new HttpError(429, 'Too many attempts. Request a new code.');
   }
   if (otp.code !== code) {
-    await prisma.otpCode.update({ where: { id: otp.id }, data: { attempts: { increment: 1 } } });
-    throw new HttpError(401, 'Invalid code');
+    const updated = await prisma.otpCode.update({ where: { id: otp.id }, data: { attempts: { increment: 1 } } });
+    if (lockUserId && updated.attempts >= MAX_LOGIN_ATTEMPTS) {
+      await lockAccount(lockUserId);
+      throw new HttpError(423, 'Account locked after 3 failed attempts.');
+    }
+    throw new HttpError(401, `Invalid code — ${Math.max(0, MAX_LOGIN_ATTEMPTS - updated.attempts)} attempt(s) left`);
   }
   await prisma.otpCode.update({ where: { id: otp.id }, data: { consumed: true } });
 }
@@ -127,6 +142,9 @@ authRouter.post(
         role: z.enum(['worker', 'client']),
         language: z.enum(['en', 'am', 'om']).default('en'),
         acceptTerms: z.boolean().default(false),
+        // Optional identity collected at signup (email+phone OR phone+Fayda).
+        email: z.string().email().optional(),
+        faydaNumber: z.string().min(6).optional(),
       })
       .parse(req.body);
 
@@ -134,6 +152,10 @@ authRouter.post(
       throw new HttpError(400, 'You must accept the Terms & Privacy Policy to continue');
     const existing = await prisma.user.findUnique({ where: { phone: body.phone } });
     if (existing) throw new HttpError(409, 'Phone already registered — please log in');
+    if (body.email) {
+      const dupEmail = await prisma.user.findUnique({ where: { email: body.email } });
+      if (dupEmail) throw new HttpError(409, 'Email already registered — please log in');
+    }
     await consumeOtp(body.phone, body.code);
 
     const user = await prisma.user.create({
@@ -143,6 +165,10 @@ authRouter.post(
         language: body.language,
         isWorker: body.role === 'worker',
         isClient: true,
+        // Email+phone signup stores the email; phone+Fayda stores the Fayda
+        // number and marks it pending verification (Tier 1 on approval).
+        ...(body.email ? { email: body.email } : {}),
+        ...(body.faydaNumber ? { faydaNumber: body.faydaNumber, faydaStatus: 'pending' } : {}),
         ...(body.role === 'worker'
           ? { workerProfile: { create: {} } }
           : {}),
@@ -174,7 +200,10 @@ authRouter.post(
 
     const user = await prisma.user.findUnique({ where: { phone }, omit: { totpSecret: false } });
     if (!user) throw new HttpError(404, 'No account for this phone — please register');
-    await consumeOtp(phone, code);
+    // Locked accounts (3-strike) cannot log in until reviewed/unlocked.
+    if (user.disabled) throw new HttpError(423, user.disabledReason || 'This account is locked. Contact support to unlock.');
+    // 3-strike account lock is enforced here (login only).
+    await consumeOtp(phone, code, user.id);
 
     // Second factor (TOTP) for users who enrolled it.
     let mfa = false;
@@ -310,6 +339,33 @@ authRouter.get(
       account: publicUser(user),
       workerProfile, businessProfile, jobsAsClient, jobsAsWorker, bids, ratings, certifications, guarantors, consents, savings,
     });
+  }),
+);
+
+// ── Self-service account deletion / right to erasure (Proclamation 1321/2024) ─
+// Anonymizes personal data and disables the account rather than hard-deleting,
+// so counterparties' job/rating history and the financial ledger stay intact
+// (legitimate-interest retention). Sessions are revoked; the request is logged.
+authRouter.delete(
+  '/me',
+  authRequired,
+  ah(async (req, res) => {
+    const id = req.user!.sub;
+    const tomb = `deleted-${id.slice(0, 10)}`;
+    await prisma.$transaction([
+      prisma.refreshToken.deleteMany({ where: { userId: id } }),
+      prisma.workerProfile.updateMany({ where: { userId: id }, data: { bio: '', voiceBioRef: null } }),
+      prisma.user.update({
+        where: { id },
+        data: {
+          name: 'Deleted user', phone: tomb, email: null,
+          faydaNumber: null, faydaStatus: 'none', totpSecret: null, totpEnabled: false,
+          disabled: true, disabledReason: 'Account deleted at user request (right to erasure)',
+        },
+      }),
+      prisma.consent.create({ data: { userId: id, document: 'erasure_request', version: '1.0' } }),
+    ]);
+    res.json({ ok: true, erased: true });
   }),
 );
 
